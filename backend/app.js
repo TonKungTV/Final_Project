@@ -1870,7 +1870,12 @@ app.get('/api/medicationlog/stats', async (req, res) => {
 app.get('/api/history/summary', async (req, res) => {
   const { userId, from, to, lateThresholdHours = 1 } = req.query;
   
-  const lateThresholdMinutes = parseFloat(lateThresholdHours) * 60;
+  const lateThresholdMinutes = Math.round(parseFloat(lateThresholdHours) * 60);
+
+  console.log('📊 Fetching summary with threshold:', { 
+    lateThresholdHours, 
+    lateThresholdMinutes 
+  });
   
   try {
     const [result] = await db.promise().query(
@@ -2168,6 +2173,231 @@ const autoUpdateExpiredSchedules = () => {
 setInterval(autoUpdateExpiredSchedules, 5 * 60 * 1000);
 autoUpdateExpiredSchedules(); // เรียกทันทีตอน start server
 
+
+// ✅ เพิ่ม API สำหรับดึงสถิติเชิงลึก
+app.get('/api/medicationlog/advanced-stats', async (req, res) => {
+  const { userId, from, to } = req.query;
+  
+  if (!userId || !from || !to) {
+    return res.status(400).json({ 
+      error: 'Missing required parameters',
+      required: ['userId', 'from', 'to']
+    });
+  }
+  
+  try {
+    // 1. สถิติแต่ละยา (รายละเอียด)
+    const [medications] = await db.promise().query(
+      `SELECT 
+         m.MedicationID,
+         m.name as MedicationName,
+         COUNT(DISTINCT s.ScheduleID) as TotalScheduled,
+         SUM(CASE WHEN s.Status = 'กินแล้ว' AND (s.IsLate = 0 OR s.LateMinutes = 0) THEN 1 ELSE 0 END) as TotalOnTime,
+         SUM(CASE WHEN s.Status = 'กินแล้ว' AND s.IsLate = 1 AND s.LateMinutes > 0 THEN 1 ELSE 0 END) as TotalLate,
+         SUM(CASE WHEN s.Status = 'กินแล้ว' THEN 1 ELSE 0 END) as TotalTaken,
+         SUM(CASE WHEN s.Status = 'ข้าม' THEN 1 ELSE 0 END) as TotalSkipped,
+         MIN(CASE WHEN s.Status = 'กินแล้ว' AND s.LateMinutes > 0 THEN s.LateMinutes ELSE NULL END) as MinLateMinutes,
+         MAX(CASE WHEN s.Status = 'กินแล้ว' AND s.LateMinutes > 0 THEN s.LateMinutes ELSE NULL END) as MaxLateMinutes,
+         AVG(CASE WHEN s.Status = 'กินแล้ว' AND s.LateMinutes > 0 THEN s.LateMinutes ELSE NULL END) as AvgLateMinutes,
+         SUM(CASE WHEN s.SideEffects IS NOT NULL AND s.SideEffects != '' THEN 1 ELSE 0 END) as SideEffectsCount,
+         GROUP_CONCAT(DISTINCT s.SideEffects SEPARATOR '; ') as SideEffectsList
+       FROM medication m
+       LEFT JOIN medicationschedule s 
+         ON m.MedicationID = s.MedicationID 
+         AND s.Date BETWEEN ? AND ?
+       WHERE m.UserID = ? AND m.IsActive = 1
+       GROUP BY m.MedicationID, m.name
+       HAVING TotalScheduled > 0
+       ORDER BY TotalTaken DESC`,
+      [from, to, userId]
+    );
+    
+    // 2. สถิติตามช่วงเวลา (Morning/Afternoon/Evening/Night)
+    const [timeDistribution] = await db.promise().query(
+      `SELECT 
+         CASE
+           WHEN HOUR(s.Time) BETWEEN 6 AND 11 THEN 'เช้า'
+           WHEN HOUR(s.Time) BETWEEN 12 AND 16 THEN 'กลางวัน'
+           WHEN HOUR(s.Time) BETWEEN 17 AND 20 THEN 'เย็น'
+           ELSE 'ก่อนนอน'
+         END as Period,
+         COUNT(*) as Total,
+         SUM(CASE WHEN s.Status = 'กินแล้ว' THEN 1 ELSE 0 END) as Taken,
+         AVG(CASE WHEN s.Status = 'กินแล้ว' AND s.LateMinutes > 0 THEN s.LateMinutes ELSE NULL END) as AvgLate
+       FROM medicationschedule s
+       JOIN medication m ON s.MedicationID = m.MedicationID
+       WHERE m.UserID = ? AND s.Date BETWEEN ? AND ?
+       GROUP BY Period
+       ORDER BY FIELD(Period, 'เช้า', 'กลางวัน', 'เย็น', 'ก่อนนอน')`,
+      [userId, from, to]
+    );
+    
+    // 3. สถิติตามวัน (Daily Trend)
+    const [dailyTrend] = await db.promise().query(
+      `SELECT 
+         s.Date,
+         COUNT(*) as Total,
+         SUM(CASE WHEN s.Status = 'กินแล้ว' THEN 1 ELSE 0 END) as Taken,
+         AVG(CASE WHEN s.Status = 'กินแล้ว' AND s.LateMinutes > 0 THEN s.LateMinutes ELSE NULL END) as AvgLate
+       FROM medicationschedule s
+       JOIN medication m ON s.MedicationID = m.MedicationID
+       WHERE m.UserID = ? AND s.Date BETWEEN ? AND ?
+       GROUP BY s.Date
+       ORDER BY s.Date`,
+      [userId, from, to]
+    );
+    
+    // แปลงข้อมูล
+    const processedMedications = medications.map(row => ({
+      ...row,
+      TotalScheduled: parseInt(row.TotalScheduled) || 0,
+      TotalOnTime: parseInt(row.TotalOnTime) || 0,
+      TotalLate: parseInt(row.TotalLate) || 0,
+      TotalTaken: parseInt(row.TotalTaken) || 0,
+      TotalSkipped: parseInt(row.TotalSkipped) || 0,
+      MinLateMinutes: parseFloat(row.MinLateMinutes) || null,
+      MaxLateMinutes: parseFloat(row.MaxLateMinutes) || null,
+      AvgLateMinutes: parseFloat(row.AvgLateMinutes) || 0,
+      SideEffectsCount: parseInt(row.SideEffectsCount) || 0,
+      AdherenceRate: row.TotalScheduled > 0 ? ((row.TotalTaken / row.TotalScheduled) * 100).toFixed(1) : 0,
+      OnTimeRate: row.TotalTaken > 0 ? ((row.TotalOnTime / row.TotalTaken) * 100).toFixed(1) : 0,
+      ComplianceScore: calculateComplianceScore(row)
+    }));
+    
+    res.json({
+      medications: processedMedications,
+      timeDistribution: timeDistribution.map(row => ({
+        ...row,
+        Total: parseInt(row.Total) || 0,
+        Taken: parseInt(row.Taken) || 0,
+        AvgLate: parseFloat(row.AvgLate) || 0,
+        AdherenceRate: row.Total > 0 ? ((row.Taken / row.Total) * 100).toFixed(1) : 0
+      })),
+      dailyTrend: dailyTrend.map(row => ({
+        ...row,
+        Total: parseInt(row.Total) || 0,
+        Taken: parseInt(row.Taken) || 0,
+        AvgLate: parseFloat(row.AvgLate) || 0,
+        AdherenceRate: row.Total > 0 ? ((row.Taken / row.Total) * 100).toFixed(1) : 0
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Error fetching advanced stats:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch stats',
+      details: error.message 
+    });
+  }
+});
+
+// ฟังก์ชันคำนวณ Compliance Score (0-100)
+function calculateComplianceScore(row) {
+  const adherenceWeight = 0.5; // 50%
+  const onTimeWeight = 0.3;    // 30%
+  const sideEffectPenalty = 0.2; // 20%
+  
+  const adherenceScore = row.TotalScheduled > 0 
+    ? (row.TotalTaken / row.TotalScheduled) * 100 
+    : 0;
+  
+  const onTimeScore = row.TotalTaken > 0 
+    ? (row.TotalOnTime / row.TotalTaken) * 100 
+    : 0;
+  
+  const sideEffectScore = row.TotalTaken > 0
+    ? Math.max(0, 100 - ((row.SideEffectsCount / row.TotalTaken) * 100))
+    : 100;
+  
+  const score = (
+    (adherenceScore * adherenceWeight) +
+    (onTimeScore * onTimeWeight) +
+    (sideEffectScore * sideEffectPenalty)
+  ).toFixed(1);
+  
+  return parseFloat(score);
+}
+
+// เพิ่ม API สำหรับดึงสถิติช่วงเวลาของยาแต่ละตัว
+app.get('/api/medicationlog/medication-time-stats', async (req, res) => {
+  const { userId, medicationId, from, to } = req.query;
+  
+  if (!userId || !from || !to) {
+    return res.status(400).json({ 
+      error: 'Missing required parameters',
+      required: ['userId', 'from', 'to']
+    });
+  }
+  
+  try {
+    // ถ้าระบุ medicationId ให้ดึงเฉพาะยาตัวนั้น, ไม่ระบุให้ดึงทั้งหมด
+    const medicationFilter = medicationId ? 'AND m.MedicationID = ?' : '';
+    const params = medicationId 
+      ? [userId, from, to, medicationId]
+      : [userId, from, to];
+    
+    const [results] = await db.promise().query(
+      `SELECT 
+         m.MedicationID,
+         m.name as MedicationName,
+         CASE
+           WHEN HOUR(s.Time) BETWEEN 6 AND 11 THEN 'เช้า'
+           WHEN HOUR(s.Time) BETWEEN 12 AND 16 THEN 'กลางวัน'
+           WHEN HOUR(s.Time) BETWEEN 17 AND 20 THEN 'เย็น'
+           ELSE 'ก่อนนอน'
+         END as Period,
+         COUNT(*) as Total,
+         SUM(CASE WHEN s.Status = 'กินแล้ว' AND (s.IsLate = 0 OR s.LateMinutes = 0) THEN 1 ELSE 0 END) as OnTime,
+         SUM(CASE WHEN s.Status = 'กินแล้ว' AND s.IsLate = 1 AND s.LateMinutes > 0 THEN 1 ELSE 0 END) as Late,
+         SUM(CASE WHEN s.Status = 'ข้าม' THEN 1 ELSE 0 END) as Skipped,
+         SUM(CASE WHEN s.Status = 'ไม่ระบุ' OR s.Status = 'รอกิน' THEN 1 ELSE 0 END) as Unspecified,
+         AVG(CASE WHEN s.Status = 'กินแล้ว' AND s.LateMinutes > 0 THEN s.LateMinutes ELSE NULL END) as AvgLate
+       FROM medication m
+       LEFT JOIN medicationschedule s 
+         ON m.MedicationID = s.MedicationID 
+         AND s.Date BETWEEN ? AND ?
+       WHERE m.UserID = ? AND m.IsActive = 1 ${medicationFilter}
+       GROUP BY m.MedicationID, m.name, Period
+       HAVING Total > 0
+       ORDER BY m.name, FIELD(Period, 'เช้า', 'กลางวัน', 'เย็น', 'ก่อนนอน')`,
+      params
+    );
+    
+    // จัดกลุ่มตามยา
+    const groupedByMedication = results.reduce((acc, row) => {
+      const medId = row.MedicationID;
+      if (!acc[medId]) {
+        acc[medId] = {
+          MedicationID: medId,
+          MedicationName: row.MedicationName,
+          periods: []
+        };
+      }
+      
+      acc[medId].periods.push({
+        Period: row.Period,
+        Total: parseInt(row.Total) || 0,
+        OnTime: parseInt(row.OnTime) || 0,
+        Late: parseInt(row.Late) || 0,
+        Skipped: parseInt(row.Skipped) || 0,
+        Unspecified: parseInt(row.Unspecified) || 0,
+        AvgLate: parseFloat(row.AvgLate) || 0,
+        AdherenceRate: row.Total > 0 
+          ? (((parseInt(row.OnTime) + parseInt(row.Late)) / parseInt(row.Total)) * 100).toFixed(1) 
+          : 0
+      });
+      
+      return acc;
+    }, {});
+    
+    res.json(Object.values(groupedByMedication));
+  } catch (error) {
+    console.error('❌ Error fetching medication time stats:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch stats',
+      details: error.message 
+    });
+  }
+});
 
 //  รัน server
 app.listen(3000, () => {

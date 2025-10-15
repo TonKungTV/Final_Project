@@ -26,6 +26,7 @@ import HistoryScreen from './screens/HistoryScreen';
 import ManageGroupsScreen from './screens/ManageGroupsScreen';
 import ManageTypesScreen from './screens/ManageTypesScreen';
 import ManageUnitsScreen from './screens/ManageUnitsScreen';
+import CalendarScreen from './screens/CalendarScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -138,6 +139,7 @@ export default function App() {
             <Stack.Screen name="ManageGroups" component={ManageGroupsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="ManageTypes" component={ManageTypesScreen} options={{ headerShown: false }} />
             <Stack.Screen name="ManageUnits" component={ManageUnitsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Calendar" component={CalendarScreen} options={{ title: 'ปฏิทิน' }} />
           </Stack.Navigator>
         </NotificationProvider>
       ) : (
