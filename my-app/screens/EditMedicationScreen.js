@@ -6,12 +6,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { BASE_URL } from './config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Calendar } from 'react-native-calendars';
-import { TimerPickerModal } from "react-native-timer-picker";
-import DateTimePickerModal from "react-native-modal-datetime-picker";
-import { useFocusEffect } from '@react-navigation/native';
+import { BASE_URL } from './config';
 
 const frequencyOptions = [
   { label: 'ทุกวัน', value: 'every_day', id: 1 },
@@ -24,8 +21,10 @@ const frequencyOptions = [
   { label: 'กินเมื่อมีอาการ', value: 'on_demand', id: 8 }
 ];
 
-const AddMedicationScreen = ({ navigation, route }) => {
-  const [userId, setUserId] = useState(null);
+const EditMedicationScreen = ({ navigation, route }) => {
+  const medId = route?.params?.medId;
+  const [loading, setLoading] = useState(true);
+
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
   const [groupID, setGroupID] = useState('');
@@ -33,7 +32,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
   const [dosage, setDosage] = useState('');
   const [unitID, setUnitID] = useState('');
   const [usageMealID, setUsageMealID] = useState(null);
-  const [priority, setPriority] = useState(null);
+  const [priority, setPriority] = useState('ปกติ');
   const [prePostTime, setPrePostTime] = useState(null);
   const [customTime, setCustomTime] = useState('');
   const [defaultTimes, setDefaultTimes] = useState([]);
@@ -43,139 +42,120 @@ const AddMedicationScreen = ({ navigation, route }) => {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [frequency, setFrequency] = useState('every_day');
-  const [frequencyID, setFrequencyID] = useState();
   const [isFrequencyWithCustomTime, setIsFrequencyWithCustomTime] = useState(false);
   const [selectedWeekDays, setSelectedWeekDays] = useState([]);
   const [cycleUseDays, setCycleUseDays] = useState('');
   const [cycleRestDays, setCycleRestDays] = useState('');
   const [selectedMonthDates, setSelectedMonthDates] = useState({});
-  const [mealTime, setMealTime] = useState({});
-  const [time, setTime] = useState({});
-  const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
-  const [selectedTime, setSelectedTime] = useState(null);
-  const [customFrequencyTime, setCustomFrequencyTime] = useState('');
-  const [CustomValue, setCustomValue] = useState('');
-
+  const [customValue, setCustomValue] = useState('');
   const [groups, setGroups] = useState([]);
   const [units, setUnits] = useState([]);
   const [types, setTypes] = useState([]);
-
-  useEffect(() => {
-    const loadUserData = async () => {
-      try {
-        // ดึง userId จาก AsyncStorage
-        const userIdStr = await AsyncStorage.getItem('userId');
-        const uid = userIdStr ? parseInt(userIdStr, 10) : null;
-        
-        if (!uid) {
-          Alert.alert('Error', 'กรุณาเข้าสู่ระบบใหม่');
-          navigation.navigate('Login');
-          return;
-        }
-
-        setUserId(uid);
-        console.log('👤 User ID:', uid);
-
-        // ✅ ดึง metadata และ meal times พร้อมกัน
-        await Promise.all([
-          fetchMetadata(),
-          fetchUserMealTimes(uid)
-        ]);
-      } catch (error) {
-        console.error('❌ Error loading user data:', error);
-        Alert.alert('Error', 'ไม่สามารถโหลดข้อมูลได้');
-      }
-    };
-
-    loadUserData();
-  }, []);
 
   const extractId = (obj) => {
     if (!obj) return null;
     return obj.GroupID ?? obj.TypeID ?? obj.DosageUnitID ?? obj.UnitID ?? obj.id ?? obj.ID ?? null;
   };
+
   const extractLabel = (obj) => {
     if (!obj) return '';
     return obj.GroupName ?? obj.TypeName ?? obj.DosageType ?? obj.name ?? obj.Label ?? '';
   };
 
-  const handleAddNavigation = (kind) => {
-    switch (kind) {
-      case 'group': return navigation.navigate('AddGroup');
-      case 'type': return navigation.navigate('AddType');
-      case 'unit': return navigation.navigate('AddUnit');
-      default: return null;
-    }
-  };
-
-  const fetchMetadata = async () => {
-    try {
-      const userId = await AsyncStorage.getItem('userId');
-      const q = userId ? `?userId=${userId}` : '';
-      const [gRes, uRes, tRes] = await Promise.all([
-        fetch(`${BASE_URL}/api/groups${q}`).then(r => r.json()),
-        fetch(`${BASE_URL}/api/units${q}`).then(r => r.json()),
-        fetch(`${BASE_URL}/api/types${q}`).then(r => r.json()),
-      ]);
-      console.log('METADATA groups, units, types:', { gRes, uRes, tRes });
-      setGroups(Array.isArray(gRes) ? gRes : []);
-      setUnits(Array.isArray(uRes) ? uRes : []);
-      setTypes(Array.isArray(tRes) ? tRes : []);
-    } catch (e) {
-      console.warn('fetch metadata error', e);
-    }
-  };
-
-  // ✅ ฟังก์ชันดึงเวลาอาหารของ user
-  const fetchUserMealTimes = async (uid) => {
-    try {
-      const response = await fetch(`${BASE_URL}/api/userdefaultmealtime/${uid}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('📥 User meal times:', data);
-      
-      setDefaultTimes(data);
-    } catch (error) {
-      console.error('❌ Error fetching user meal times:', error);
-      Alert.alert('Error', 'ไม่สามารถดึงเวลาอาหารได้\n' + error.message);
-    }
-  };
-
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchMetadata();
-      if (userId) {
-        fetchUserMealTimes(userId);
-      }
-    }, [userId])
-  );
-
   useEffect(() => {
-    if (!route || !route.params) return;
-    const { newGroupId, newGroupName, newUnitId, newUnitName, newTypeId, newTypeName } = route.params;
-    if (newGroupId) {
-      setGroupID(String(newGroupId));
-      navigation.setParams({ newGroupId: undefined, newGroupName: undefined });
-    } else if (newGroupName && !newGroupId) {
-      fetchMetadata().then(() => {
-        const found = groups.find(g => (g.GroupName || g.name) === newGroupName);
-        if (found) setGroupID(String(found.GroupID ?? found.id ?? found.GroupID));
-        navigation.setParams({ newGroupName: undefined });
-      });
+    (async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const q = userId ? `?userId=${userId}` : '';
+        const [gRes, uRes, tRes, timesRes] = await Promise.all([
+          fetch(`${BASE_URL}/api/groups${q}`).then(r => r.json()),
+          fetch(`${BASE_URL}/api/units${q}`).then(r => r.json()),
+          fetch(`${BASE_URL}/api/types${q}`).then(r => r.json()),
+          fetch(`${BASE_URL}/api/userdefaultmealtime`).then(r => r.json())
+        ]);
+        setGroups(Array.isArray(gRes) ? gRes : []);
+        setUnits(Array.isArray(uRes) ? uRes : []);
+        setTypes(Array.isArray(tRes) ? tRes : []);
+        setDefaultTimes(Array.isArray(timesRes) ? timesRes : []);
+      } catch (e) {
+        console.warn('Failed to load metadata', e);
+      }
+      if (medId) await loadMedication(medId);
+      setLoading(false);
+    })();
+  }, [medId]);
+
+  const loadMedication = async (id) => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/medications/${id}`);
+      if (!res.ok) {
+        console.warn('Failed to fetch medication', await res.text());
+        return;
+      }
+      const data = await res.json();
+      console.log('🔍 loadMedication data:', data);
+
+      setName(data.Name ?? '');
+      setNote(data.Note ?? '');
+      setGroupID(String(data.GroupID ?? ''));
+      setTypeID(data.TypeID ?? null);
+      setDosage(data.Dosage ? String(data.Dosage) : '');
+      setUnitID(data.UnitID ? String(data.UnitID) : '');
+      setUsageMealID(data.UsageMealID ?? null);
+      setPriority(data.Priority ? (data.Priority === 2 ? 'สูง' : 'ปกติ') : 'ปกติ');
+      
+      // จัดการ PrePostTime
+      if (data.PrePostTime !== null && data.PrePostTime !== undefined) {
+        if ([15, 30].includes(data.PrePostTime)) {
+          setPrePostTime(data.PrePostTime);
+          setCustomTime('');
+        } else {
+          setPrePostTime('custom');
+          setCustomTime(String(data.PrePostTime));
+        }
+      } else {
+        setPrePostTime(null);
+        setCustomTime('');
+      }
+
+      const defaultTimeIds = Array.isArray(data.defaultTimes) 
+        ? data.defaultTimes 
+        : (Array.isArray(data.DefaultTimeIDs) ? data.DefaultTimeIDs : []);
+      setSelectedTimeIds(defaultTimeIds);
+
+      const freq = data.Frequency ?? data.FrequencyValue ?? 'every_day';
+      setFrequency(freq);
+      setIsFrequencyWithCustomTime(['every_X_days','every_X_hours','every_X_minutes'].includes(freq));
+      setCustomValue(data.CustomValue ? String(data.CustomValue) : '');
+      setSelectedWeekDays(Array.isArray(data.WeekDays) ? data.WeekDays : []);
+
+      // จัดการ MonthDays
+      if (Array.isArray(data.MonthDays) && data.MonthDays.length > 0) {
+        const marked = {};
+        const start = data.StartDate ? new Date(data.StartDate) : new Date();
+        const end = data.EndDate ? new Date(data.EndDate) : new Date(start);
+        
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          if (data.MonthDays.includes(d.getDate())) {
+            const dateStr = d.toISOString().split('T')[0];
+            marked[dateStr] = { selected: true, selectedColor: '#4da6ff' };
+          }
+        }
+        setSelectedMonthDates(marked);
+      } else {
+        setSelectedMonthDates({});
+      }
+
+      setCycleUseDays(data.Cycle_Use_Days ? String(data.Cycle_Use_Days) : '');
+      setCycleRestDays(data.Cycle_Rest_Days ? String(data.Cycle_Rest_Days) : '');
+      
+      if (data.StartDate) setStartDate(new Date(data.StartDate));
+      if (data.EndDate) setEndDate(new Date(data.EndDate));
+    } catch (e) {
+      console.error('Load medication error', e);
+      Alert.alert('เกิดข้อผิดพลาด', 'ไม่สามารถโหลดข้อมูลยาได้');
     }
-    if (newUnitId) {
-      setUnitID(String(newUnitId));
-      navigation.setParams({ newUnitId: undefined, newUnitName: undefined });
-    }
-    if (newTypeId) {
-      setTypeID(parseInt(newTypeId, 10));
-      navigation.setParams({ newTypeId: undefined, newTypeName: undefined });
-    }
-  }, [route?.params]);
+  };
 
   const convertMeal = (mealId) => {
     switch (mealId) {
@@ -187,10 +167,6 @@ const AddMedicationScreen = ({ navigation, route }) => {
     }
   };
 
-  const showDatePicker = () => setDatePickerVisibility(true);
-  const hideDatePicker = () => setDatePickerVisibility(false);
-  const handleConfirm = (time) => { setSelectedTime(time); hideDatePicker(); };
-
   const toggleTime = (id) => {
     setSelectedTimeIds(prev =>
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
@@ -201,37 +177,30 @@ const AddMedicationScreen = ({ navigation, route }) => {
     const dateStr = day.dateString;
     setSelectedMonthDates(prev => {
       const copy = { ...prev };
-      if (copy[dateStr]) {
-        delete copy[dateStr];
-      } else {
-        copy[dateStr] = { selected: true, selectedColor: '#4da6ff' };
-      }
+      if (copy[dateStr]) delete copy[dateStr];
+      else copy[dateStr] = { selected: true, selectedColor: '#4da6ff' };
       return copy;
     });
   };
 
+  const handleFrequencyChange = (value) => {
+    setFrequency(value);
+    setIsFrequencyWithCustomTime(['every_X_days','every_X_hours','every_X_minutes'].includes(value));
+  };
+
   const handleSave = async () => {
-    if (!userId) {
-      Alert.alert('กรุณาเข้าสู่ระบบก่อนเพิ่มยา');
-      navigation.navigate('Login');
-      return;
-    }
     if (!name || !typeID || selectedTimeIds.length === 0 || !groupID) {
       Alert.alert('กรุณากรอกข้อมูลให้ครบ');
       return;
     }
-    
-    if ((usageMealID === 2 || usageMealID === 3) && !prePostTime) {
-      Alert.alert('กรุณาเลือกเวลาก่อน/หลังอาหาร');
-      return;
-    }
+
     if ((usageMealID === 2 || usageMealID === 3)) {
       const needMinutes =
         prePostTime === null ||
         prePostTime === undefined ||
         (prePostTime === 'custom' && (!customTime || isNaN(parseInt(customTime, 10))));
       if (needMinutes) {
-        Alert.alert('โปรดเลือกจำนวน "นาที" สำหรับก่อน/หลังอาหาร (เช่น 15 หรือ 30 นาที)');
+        Alert.alert('โปรดเลือกจำนวน "นาที" สำหรับก่อน/หลังอาหาร');
         return;
       }
     }
@@ -244,7 +213,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
       Alert.alert('โปรดเลือกวันที่ของเดือนอย่างน้อย 1 วัน');
       return;
     }
-    if ((frequency === 'every_X_days' || frequency === 'every_X_hours' || frequency === 'every_X_minutes') && (!CustomValue || isNaN(parseInt(CustomValue, 10)))) {
+    if ((frequency === 'every_X_days' || frequency === 'every_X_hours' || frequency === 'every_X_minutes') && (!customValue || isNaN(parseInt(customValue, 10)))) {
       Alert.alert('โปรดกรอกจำนวนสำหรับความถี่แบบกำหนดเอง');
       return;
     }
@@ -256,7 +225,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
     const userIdStr = await AsyncStorage.getItem('userId');
     const userId = userIdStr ? parseInt(userIdStr, 10) : null;
     if (!userId) {
-      Alert.alert('กรุณาเข้าสู่ระบบก่อนเพิ่มยา');
+      Alert.alert('กรุณาเข้าสู่ระบบก่อนแก้ไขยา');
       navigation.navigate('LoginScreen');
       return;
     }
@@ -266,12 +235,10 @@ const AddMedicationScreen = ({ navigation, route }) => {
       defaultTimeFields[`DefaultTime_ID_${index + 1}`] = id;
     });
 
-    const selectedFrequency = frequencyOptions.find(option => option.value === frequency);
-    const FrequencyID = selectedFrequency ? selectedFrequency.id : null;
-    if (!FrequencyID) {
-      console.error('❌ FrequencyID is not defined');
-      return;
-    }
+    const monthDayNumbers = Object.keys(selectedMonthDates)
+      .map(d => new Date(d).getDate())
+      .filter(n => Number.isFinite(n));
+    const uniqueMonthDays = Array.from(new Set(monthDayNumbers)).sort((a,b) => a-b);
 
     const prePostMinutes =
       (usageMealID === 2 || usageMealID === 3)
@@ -279,14 +246,6 @@ const AddMedicationScreen = ({ navigation, route }) => {
           ? parseInt(customTime, 10)
           : prePostTime)
         : null;
-
-    const monthDayNumbers = Object.keys(selectedMonthDates)
-      .map(d => {
-        const parts = String(d).split('-');
-        return parts.length >= 3 ? parseInt(parts[2], 10) : NaN;
-      })
-      .filter(Number.isFinite);
-    const uniqueMonthDays = Array.from(new Set(monthDayNumbers)).sort((a, b) => a - b);
 
     const formatLocalDate = (d) => {
       if (!d) return null;
@@ -296,8 +255,8 @@ const AddMedicationScreen = ({ navigation, route }) => {
       return `${y}-${m}-${day}`;
     };
 
-    const medicationData = {
-      UserID: userId, // ✅ ใช้ userId จาก state
+    const payload = {
+      UserID: userId,
       Name: name,
       Note: note,
       GroupID: parseInt(groupID, 10),
@@ -310,8 +269,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
       PrePostTime: prePostMinutes,
       StartDate: formatLocalDate(startDate),
       EndDate: formatLocalDate(endDate),
-      CustomValue: CustomValue || null,
-      FrequencyID,
+      CustomValue: customValue || null,
       ...defaultTimeFields,
       WeekDays: selectedWeekDays.length ? selectedWeekDays : null,
       MonthDays: uniqueMonthDays.length ? uniqueMonthDays : null,
@@ -321,61 +279,38 @@ const AddMedicationScreen = ({ navigation, route }) => {
     };
 
     try {
-      console.log('🔔 medicationData ->', medicationData);
-      const response = await fetch(`${BASE_URL}/api/medications`, {
-        method: 'POST',
+      console.log('🔔 Update payload ->', payload);
+      const res = await fetch(`${BASE_URL}/api/medications/${medId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(medicationData),
+        body: JSON.stringify(payload)
       });
-
-      if (response.ok) {
-        const result = await response.json();
-        const newMedicationId = result.medicationId;
-
-        // ✅ บันทึก log เริ่มต้น
-        if (newMedicationId) {
-          const today = new Date().toISOString().split('T')[0];
-          await fetch(`${BASE_URL}/api/medicationlog`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              medicationId: newMedicationId,
-              scheduleId: null,
-              date: today,
-              status: 'รอกิน',
-              sideEffects: null
-            }),
-          }).catch(err => console.warn('Log creation failed:', err));
-        }
-
-        Alert.alert('เพิ่มยาเรียบร้อย');
-        navigation.replace('HomeScreen');
+      if (res.ok) {
+        Alert.alert('แก้ไขข้อมูลเรียบร้อย');
+        navigation.goBack();
       } else {
-        const errMsg = await response.text();
-        console.log('Error response:', errMsg);
-        Alert.alert('เกิดข้อผิดพลาดในการเพิ่ม');
+        const txt = await res.text();
+        console.error('Edit failed', txt);
+        Alert.alert('เกิดข้อผิดพลาดในการบันทึก');
       }
-    } catch (error) {
-      console.error('ERROR:', error);
+    } catch (e) {
+      console.error('Save error', e);
       Alert.alert('เชื่อมต่อ backend ไม่ได้');
     }
   };
 
-  const handleFrequencyChange = (value) => {
-    setFrequency(value);
-    if (value === 'every_X_days' || value === 'every_X_hours' || value === 'every_X_minutes') {
-      setIsFrequencyWithCustomTime(true);
-    } else {
-      setIsFrequencyWithCustomTime(false);
-    }
-  };
+  if (loading) return (
+    <View style={{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'#f5f7fa'}}>
+      <Text style={{fontSize:16,color:'#7f8c8d'}}>กำลังโหลด...</Text>
+    </View>
+  );
 
   return (
     <ScrollView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>เพิ่มยาใหม่</Text>
-        <Text style={styles.headerSubtitle}>กรุณากรอกข้อมูลยาให้ครบถ้วน</Text>
+        <Text style={styles.headerTitle}>แก้ไขข้อมูลยา</Text>
+        <Text style={styles.headerSubtitle}>กรุณาตรวจสอบข้อมูลก่อนบันทึก</Text>
       </View>
 
       {/* Section: ข้อมูลพื้นฐาน */}
@@ -407,10 +342,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
           <View style={styles.pickerWrapper}>
             <Picker
               selectedValue={groupID}
-              onValueChange={(v) => {
-                if (v === '__add_group__') return handleAddNavigation('group');
-                setGroupID(v === '' ? '' : String(v));
-              }}
+              onValueChange={(v) => setGroupID(v === '' ? '' : String(v))}
               style={styles.picker}
             >
               <Picker.Item label="-- เลือกกลุ่มโรค --" value="" />
@@ -419,7 +351,6 @@ const AddMedicationScreen = ({ navigation, route }) => {
                 const label = extractLabel(g) || `กลุ่ม ${id ?? ''}`;
                 return <Picker.Item key={id ?? JSON.stringify(g)} label={label} value={String(id ?? '')} />;
               })}
-              <Picker.Item label="+ เพิ่มกลุ่มโรคใหม่" value="__add_group__" />
             </Picker>
           </View>
         </View>
@@ -439,7 +370,6 @@ const AddMedicationScreen = ({ navigation, route }) => {
             <Picker
               selectedValue={typeID !== null && typeID !== undefined ? String(typeID) : ''}
               onValueChange={(v) => {
-                if (v === '__add_type__') return handleAddNavigation('type');
                 if (v === '') return setTypeID(null);
                 const num = Number(v);
                 setTypeID(!Number.isNaN(num) ? num : v);
@@ -452,7 +382,6 @@ const AddMedicationScreen = ({ navigation, route }) => {
                 const label = extractLabel(t) || `ประเภท ${id ?? ''}`;
                 return <Picker.Item key={id ?? JSON.stringify(t)} label={label} value={String(id ?? '')} />;
               })}
-              <Picker.Item label="+ เพิ่มประเภทใหม่" value="__add_type__" />
             </Picker>
           </View>
         </View>
@@ -484,10 +413,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={unitID}
-                onValueChange={(v) => {
-                  if (v === '__add_unit__') return handleAddNavigation('unit');
-                  setUnitID(v === '' ? '' : String(v));
-                }}
+                onValueChange={(v) => setUnitID(v === '' ? '' : String(v))}
                 style={styles.picker}
               >
                 <Picker.Item label="หน่วย" value="" />
@@ -496,7 +422,6 @@ const AddMedicationScreen = ({ navigation, route }) => {
                   const label = extractLabel(u) || `หน่วย ${id ?? ''}`;
                   return <Picker.Item key={id ?? JSON.stringify(u)} label={label} value={String(id ?? '')} />;
                 })}
-                <Picker.Item label="+ เพิ่ม" value="__add_unit__" />
               </Picker>
             </View>
           </View>
@@ -536,12 +461,12 @@ const AddMedicationScreen = ({ navigation, route }) => {
           </View>
         </View>
 
-        {(isFrequencyWithCustomTime) && (
+        {isFrequencyWithCustomTime && (
           <View style={styles.inputContainer}>
             <Text style={styles.label}>กรอกจำนวน <Text style={styles.required}>*</Text></Text>
             <TextInput
               style={styles.input}
-              value={CustomValue}
+              value={customValue}
               onChangeText={setCustomValue}
               keyboardType="numeric"
               placeholder="กรอกจำนวน"
@@ -655,8 +580,10 @@ const AddMedicationScreen = ({ navigation, route }) => {
                 ]}
                 onPress={() => {
                   setUsageMealID(opt.id);
-                  setPrePostTime(null);
-                  setCustomTime('');
+                  if (opt.id === 1) {
+                    setPrePostTime(null);
+                    setCustomTime('');
+                  }
                 }}
               >
                 <Text style={styles.usageIcon}>{opt.icon}</Text>
@@ -724,12 +651,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
         )}
 
         <View style={styles.inputContainer}>
-        <Text style={styles.label}>มื้อ/เวลาที่กินยา <Text style={styles.required}>*</Text></Text>
-        {defaultTimes.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>กำลังโหลดเวลาอาหาร...</Text>
-          </View>
-        ) : (
+          <Text style={styles.label}>มื้อ/เวลาที่กินยา <Text style={styles.required}>*</Text></Text>
           <View style={styles.mealTimesContainer}>
             {defaultTimes.map(time => (
               <TouchableOpacity
@@ -745,13 +667,13 @@ const AddMedicationScreen = ({ navigation, route }) => {
                     styles.mealTimeLabel,
                     selectedTimeIds.includes(time.DefaultTime_ID) && styles.mealTimeLabelActive
                   ]}>
-                    {time.MealName || convertMeal(time.MealID)}
+                    {convertMeal(time.MealID)}
                   </Text>
                   <Text style={[
                     styles.mealTimeTime,
                     selectedTimeIds.includes(time.DefaultTime_ID) && styles.mealTimeTimeActive
                   ]}>
-                    {time.Time.slice(0, 5)}
+                    {time.Time?.slice?.(0, 5) ?? ''}
                   </Text>
                 </View>
                 {selectedTimeIds.includes(time.DefaultTime_ID) && (
@@ -760,8 +682,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
               </TouchableOpacity>
             ))}
           </View>
-        )}
-      </View>
+        </View>
       </View>
 
       {/* Section: ระยะเวลา */}
@@ -864,7 +785,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
       {/* Action Buttons */}
       <View style={styles.actionButtons}>
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>💾 บันทึก</Text>
+          <Text style={styles.saveButtonText}>💾 บันทึกการแก้ไข</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
@@ -1216,17 +1137,6 @@ const styles = StyleSheet.create({
     color: '#4da6ff',
     fontWeight: '600',
   },
-  emptyState: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#7f8c8d',
-  },
 });
 
-export default AddMedicationScreen;
+export default EditMedicationScreen;

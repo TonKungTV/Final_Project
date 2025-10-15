@@ -3,6 +3,17 @@
     "name": "my-app",
     "slug": "my-app",
     "version": "1.0.0",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification_icon.png",
+          "color": "#ffffff",
+          "defaultChannel": "default",
+          "sounds": ["./assets/notification_sound.wav"]
+        }
+      ]
+    ],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -18,11 +29,8 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff",
-        "permissions": [
-          "NOTIFICATIONS",
-          "NOTIFICATIONS"
-        ]
+        "backgroundColor": "#ffffff"
+
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.myapp"

@@ -1,10 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
 
 const Home = () => {
-  const navigation = useNavigation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -21,12 +19,6 @@ const Home = () => {
         useNativeDriver: true,
       }),
     ]).start();
-
-    const timer = setTimeout(() => {
-      navigation.replace('LoginScreen');
-    }, 3000);
-
-    return () => clearTimeout(timer);
   }, []);
 
   return (

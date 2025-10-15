@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import {
+import React, { useEffect, useState } from 'react';import {
   View,
   Text,
   TextInput,
@@ -9,6 +8,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from './config';
 
 const ProfileScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -17,6 +18,72 @@ const ProfileScreen = ({ navigation }) => {
   const [gender, setGender] = useState('');
   const [birthdate, setBirthdate] = useState('');
   const [bloodType, setBloodType] = useState('');
+
+// ดึงข้อมูลผู้ใช้จาก API เมื่อเข้ามาหน้าจอ
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        if (!userId) return;
+        
+        const response = await fetch(`${BASE_URL}/api/user/${userId}`);
+        const data = await response.json();
+        
+        if (data) {
+          setName(data.Name);
+          setEmail(data.Email);
+          setPhone(data.Phone);
+          setGender(data.Gender);
+          setBirthdate(data.BirthDate);
+          setBloodType(data.BloodType);
+        } else {
+          Alert.alert('ไม่พบข้อมูลผู้ใช้');
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        Alert.alert('ไม่สามารถดึงข้อมูลผู้ใช้');
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
+const saveProfile = async () => {
+  try {
+    const userId = await AsyncStorage.getItem('userId');
+    if (!userId) return;
+    const response = await fetch(`${BASE_URL}/api/user/${userId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name,
+        email,
+        phone,
+        gender,
+        birthdate,
+        bloodType,
+      }),
+    });
+    
+    const result = await response.json();
+    // แสดงผลการตอบกลับจาก API
+    console.log('Response:', result);
+
+    if (response.ok) {
+      console.log('Profile saved successfully');
+      alert('บันทึกข้อมูลสำเร็จ');
+    } else {
+      console.error('Failed to save profile', result);
+      alert('ไม่สามารถบันทึกข้อมูลได้');
+    }
+  } catch (error) {
+    console.error('Error saving profile:', error);
+    alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+  }
+};
+
 
   const handleSave = () => {
     // เพิ่ม logic สำหรับการบันทึกข้อมูลได้
@@ -27,9 +94,6 @@ const ProfileScreen = ({ navigation }) => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>ข้อมูลส่วนตัว</Text>
         <View style={{ width: 24 }} /> {/* Placeholder เพื่อให้ title อยู่กลาง */}
       </View>
@@ -84,7 +148,7 @@ const ProfileScreen = ({ navigation }) => {
         />
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+          <TouchableOpacity style={styles.saveButton} onPress={saveProfile}>
             <Text style={styles.saveButtonText}>บันทึก</Text>
           </TouchableOpacity>
           <TouchableOpacity

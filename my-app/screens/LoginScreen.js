@@ -5,7 +5,7 @@ import {
 import { BASE_URL } from './config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const LoginScreen = ({ navigation }) => {
+const LoginScreen = ({ navigation, onLoginSuccess }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
@@ -25,12 +25,41 @@ const LoginScreen = ({ navigation }) => {
             const data = await res.json();
 
             if (res.ok) {
-                const userId = data.userId; // ✅ ดึง userId ออกมาให้ชัดเจน
-                console.log('✅ Login Response:', data); // ⬅️ ดูว่าได้อะไรกลับมาจริง
+                console.log('✅ Login Response:', data);
                 await AsyncStorage.setItem('userId', data.user.id.toString());
 
-                Alert.alert('เข้าสู่ระบบสำเร็จ');
-                navigation.navigate('HomeScreen');
+                // ✅ ตรวจสอบว่ามี onLoginSuccess หรือไม่
+                console.log('🔍 onLoginSuccess exists?', !!onLoginSuccess);
+
+                if (onLoginSuccess) {
+                    console.log('✅ เรียก onLoginSuccess()');
+                    onLoginSuccess();
+                } else {
+                    console.log('⚠️ onLoginSuccess ไม่ได้ถูกส่งมา - ใช้ fallback');
+                    // Fallback: ถ้าไม่มี callback ให้ reload แอพ
+                    Alert.alert('เข้าสู่ระบบสำเร็จ', 'กรุณารีสตาร์ทแอพ', [
+                        {
+                            text: 'ตกลง',
+                            onPress: () => {
+                                // Force reload app state
+                                navigation.reset({
+                                    index: 0,
+                                    routes: [{ name: 'LoginScreen' }],
+                                });
+                            }
+                        }
+                    ]);
+                    return;
+                }
+
+                Alert.alert('เข้าสู่ระบบสำเร็จ', '', [
+                    {
+                        text: 'ตกลง',
+                        onPress: () => {
+                            console.log('✅ กด Alert ตกลง');
+                        }
+                    }
+                ]);
             }
             else {
                 Alert.alert('เข้าสู่ระบบไม่สำเร็จ', data.error || 'มีบางอย่างผิดพลาด');

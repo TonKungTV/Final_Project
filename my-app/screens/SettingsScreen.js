@@ -110,7 +110,31 @@ const settings = [
   { id: 4, label: 'ออกจากระบบ', icon: 'log-out-outline' }, //  icon 
 ];
 
-const SettingsScreen = ({ navigation }) => {
+const handleLogout = async () => {
+    Alert.alert(
+      'ออกจากระบบ',
+      'คุณต้องการออกจากระบบหรือไม่?',
+      [
+        {
+          text: 'ยกเลิก',
+          style: 'cancel'
+        },
+        {
+          text: 'ออกจากระบบ',
+          style: 'destructive',
+          onPress: async () => {
+            if (onLogout) {
+              await onLogout();
+            } else {
+              Alert.alert('เกิดข้อผิดพลาด', 'กรุณารีสตาร์ทแอพ');
+            }
+          }
+        }
+      ]
+    );
+  };
+  
+const SettingsScreen = ({ navigation,onLogout }) => {
   const handlePress = (label) => {
     switch (label) {
       case 'ข้อมูลส่วนตัว':

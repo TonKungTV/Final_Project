@@ -1,8 +1,6 @@
-// NotificationHelper.js
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import * as Device from 'expo-device';
 
-// ให้แสดง notification เวลาแอปเปิดอยู่
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -11,22 +9,63 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// ขอ permission
 export async function requestNotificationPermission() {
-  // SDK 53: ขอสิทธิ์ผ่าน expo-notifications ได้เลย
+  if (!Device.isDevice) {
+    console.warn('Notifications: not running on a physical device; some features may be unavailable.');
+  }
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  if (existingStatus === 'granted') return true;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
 }
 
-// ตั้งเวลาการแจ้งเตือน
-export async function scheduleNotification(title, body, triggerDate) {
-  // triggerDate: new Date(...) หรือ object { hour, minute, repeats }
-  return await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      // sound: true, // ถ้าต้องการเสียงบน iOS ให้ใส่ไฟล์เสียงหรือใช้ค่าดีฟอลต์
-    },
-    trigger: triggerDate,
-  });
+export async function ensureAndroidChannel() {
+  try {
+    await Notifications.setNotificationChannelAsync('med-channel', {
+      name: 'Medication reminders',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+      sound: 'default',
+    });
+  } catch (e) {
+    console.warn('Failed to create Android notification channel', e);
+  }
+}
+
+export async function cancelAllScheduledNotifications() {
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch (e) {
+    console.warn('cancelAllScheduledNotifications error', e);
+  }
+}
+
+/**
+ * scheduleNotification:
+ *  - title, body: strings
+ *  - date: JS Date object (local time)
+ * Returns scheduled notification id (string) or null on failure
+ */
+export async function scheduleNotification({ title, body, date }) {
+  try {
+    if (!date || !(date instanceof Date)) return null;
+    // if target time in past, skip
+    const now = new Date();
+    if (date <= now) return null;
+
+    if (Device.isDevice && Platform.OS === 'android') {
+      await ensureAndroidChannel();
+    }
+
+    const trigger = date; // Date trigger supported by expo-notifications
+    const id = await Notifications.scheduleNotificationAsync({
+      content: { title, body, sound: 'default' },
+      trigger,
+    });
+    return id;
+  } catch (e) {
+    console.error('scheduleNotification error', e);
+    return null;
+  }
 }
