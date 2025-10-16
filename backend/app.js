@@ -1360,7 +1360,7 @@ const updateMedicationLog = async (medicationId, date) => {
 // ✅ PATCH /api/schedule/:id/status - อัปเดตสถานะการกินยา
 app.patch('/api/schedule/:id/status', async (req, res) => {
   const scheduleId = req.params.id;
-  const { status, sideEffects, actualTime, recordedAt } = req.body;
+  const { status, sideEffects, actualTime, recordedAt, timingNote } = req.body;
 
   console.log('🔄 Update schedule status:', { scheduleId, status, actualTime });
 
@@ -1403,10 +1403,11 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
            ActualTime = ?,
            RecordedAt = ?,
            LateMinutes = ?,
-           IsLate = ?
+           IsLate = ?,
+           TimingNote = ?
        WHERE ScheduleID = ?`,
       [status, sideEffects || null, actualTime || null, recordedAt || new Date().toISOString(),
-        lateMinutes, isLate, scheduleId]
+        lateMinutes, isLate, timingNote, scheduleId]
     );
 
     // ✅ อัปเดต medicationlog
@@ -1427,6 +1428,7 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
       status,
       lateMinutes,
       isLate,
+      timingNote,
       log: logResult
     });
   } catch (error) {
@@ -2556,21 +2558,41 @@ const calculateLateMinutes = (scheduledTime, actualTime) => {
 
 //  ฟังก์ชัน Auto-update Status เป็น "ไม่ระบุ" สำหรับยาที่เลยเวลา
 const autoUpdateExpiredSchedules = () => {
+  // ได้วันนี้ 00:00:00
   const now = new Date();
   const currentDate = now.toISOString().split('T')[0];
 
-  const sql = `
+  // ✅ อัพเดท schedule ที่เลยเวลาปัจจุบัน วันนี้
+  const todaySQL = `
     UPDATE medicationschedule 
     SET Status = 'ไม่ระบุ' 
     WHERE Status = 'รอกิน' 
-      AND Date < ? 
+      AND Date = ?
   `;
 
-  db.query(sql, [currentDate], (err, result) => {
+  const currentTime = now.toTimeString().slice(0, 8); // HH:MM:SS
+  
+  db.query(todaySQL, [currentDate, currentTime], (err, result) => {
     if (err) {
-      console.error('❌ Auto-update expired schedules error:', err);
+      console.error('❌ Auto-update today expired schedules error:', err);
     } else if (result.affectedRows > 0) {
-      console.log(`✅ Auto-updated ${result.affectedRows} expired schedules to "ไม่ระบุ"`);
+      console.log(`✅ Auto-updated ${result.affectedRows} expired schedules today to "ไม่ระบุ"`);
+    }
+  });
+
+  // ✅ อัพเดท schedule ที่ยังคงสถานะ "รอกิน" ในวันที่ผ่านมา
+  const pastSQL = `
+    UPDATE medicationschedule 
+    SET Status = 'ไม่ระบุ' 
+    WHERE Status = 'รอกิน' 
+      AND Date < ?
+  `;
+
+  db.query(pastSQL, [currentDate], (err, result) => {
+    if (err) {
+      console.error('❌ Auto-update past expired schedules error:', err);
+    } else if (result.affectedRows > 0) {
+      console.log(`✅ Auto-updated ${result.affectedRows} past expired schedules to "ไม่ระบุ"`);
     }
   });
 };
