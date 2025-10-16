@@ -13,7 +13,6 @@ import MedicationDetailScreen from './screens/MedicationDetailScreen';
 import TestHomeScreen from './screens/TestHomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
-import DailyReminderScreen from './screens/DailyReminderScreen';
 import Home from './screens/Home';
 import SettingsScreen from './screens/SettingsScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -125,7 +124,6 @@ export default function App() {
             <Stack.Screen name="MedicationListScreen" component={MedicationListScreen} options={{ title: 'รายการยา' }} />
             <Stack.Screen name="AddMedication" component={AddMedicationScreen} options={{ title: 'เพิ่มยา' }} />
             <Stack.Screen name="MedicationDetailScreen" component={MedicationDetailScreen} options={{ title: 'รายละเอียดยา' }} />
-            <Stack.Screen name="DailyReminderScreen" component={DailyReminderScreen} options={{ title: 'รายการยาที่ต้องกิน' }} />
             <Stack.Screen name="SettingsScreen" options={{ title: 'ตั้งค่าผู้ใช้' }}>
               {(props) => <SettingsScreen {...props} onLogout={handleLogout} />}
             </Stack.Screen>

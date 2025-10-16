@@ -107,12 +107,14 @@ const CalendarScreen = ({ navigation }) => {
             rawTime: r.Time,
             name: r.name,
             dose: r.Dosage != null && r.DosageType ? `${r.Dosage} ${r.DosageType}` : '-',
-            status: r.Status || 'รอกิน',
+            status: r.Status && r.Status.trim() !== '' ? r.Status : 'ไม่ระบุ',
             mealName: r.MealName || '',
             medType: r.TypeName || '-',
             importance: r.PriorityLabel || 'ปกติ',
             actualTime: r.ActualTime || null,
             sideEffects: r.SideEffects || null,
+            lateMinutes: r.LateMinutes || 0,
+            isLate: r.IsLate || 0,
         }));
         setSelectedDayMeds(mapped);
     };
@@ -742,18 +744,46 @@ const CalendarScreen = ({ navigation }) => {
                                     <View style={styles.detailSection}>
                                         <Text style={styles.detailSectionTitle}>ข้อมูลการบันทึก</Text>
                                         {selectedMed.status === 'กินแล้ว' && (
-                                            <View style={styles.detailRow}>
-                                                <Ionicons name="time" size={16} color="#4dabf7" />
-                                                <Text style={styles.detailText}>
-                                                    เวลาที่กินจริง: {selectedMed.actualTime ? selectedMed.actualTime.slice(0, 5) : '-'}
-                                                </Text>
-                                            </View>
+                                            <>
+                                                <View style={styles.detailRow}>
+                                                    <Ionicons name="time" size={16} color="#4dabf7" />
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.detailLabel}>เวลาที่กำหนด</Text>
+                                                        <Text style={styles.detailValue}>{selectedMed.time} น.</Text>
+                                                    </View>
+                                                </View>
+                                                <View style={styles.detailRow}>
+                                                    <Ionicons name="checkmark-circle" size={16} color="#28a745" />
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.detailLabel}>เวลาที่กินจริง</Text>
+                                                        <Text style={styles.detailValue}>
+                                                            {selectedMed.actualTime ? selectedMed.actualTime.slice(0, 5) : '-'} น.
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                                {selectedMed.lateMinutes > 0 && (
+                                                    <View style={styles.detailRow}>
+                                                        <Ionicons name="warning" size={16} color="#ffc107" />
+                                                        <View style={{ flex: 1 }}>
+                                                            <Text style={styles.detailLabel}>ล่าช้า</Text>
+                                                            <Text style={styles.detailValue}>{selectedMed.lateMinutes} นาที</Text>
+                                                        </View>
+                                                    </View>
+                                                )}
+                                            </>
                                         )}
                                         <View style={styles.detailRow}>
-                                            <Ionicons name={selectedMed.sideEffects ? "warning" : "checkmark-circle"} size={16} color={selectedMed.sideEffects ? "#ffc107" : "#28a745"} />
-                                            <Text style={styles.detailText}>
-                                                ผลข้างเคียง: {selectedMed.sideEffects || 'ไม่มี'}
-                                            </Text>
+                                            <Ionicons
+                                                name={selectedMed.sideEffects ? "warning" : "checkmark-circle"}
+                                                size={16}
+                                                color={selectedMed.sideEffects ? "#ffc107" : "#28a745"}
+                                            />
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.detailLabel}>ผลข้างเคียง</Text>
+                                                <Text style={[styles.detailValue, { color: selectedMed.sideEffects ? '#d9534f' : '#28a745' }]}>
+                                                    {selectedMed.sideEffects || 'ไม่มี'}
+                                                </Text>
+                                            </View>
                                         </View>
                                     </View>
                                 )}
@@ -810,7 +840,7 @@ const CalendarScreen = ({ navigation }) => {
                                     </>
                                 )}
 
-                                {modalMode === 'record' && (
+                                {(modalMode === 'record' && (selectedMed.status === 'รอกิน' || selectedMed.status === 'ไม่ระบุ')) && (
                                     <View style={styles.modalActions}>
                                         <TouchableOpacity
                                             style={[styles.actionButton, styles.skipButton]}
@@ -1510,6 +1540,16 @@ const styles = StyleSheet.create({
         color: '#666',
         fontSize: 15,
         fontWeight: '500',
+    },
+    detailLabel: {
+        fontSize: 12,
+        color: '#999',
+        marginBottom: 2,
+    },
+    detailValue: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#333',
     },
 });
 
