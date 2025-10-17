@@ -759,6 +759,101 @@ function getOrCreateUsageMealID(MealName, TimeID, callback) {
 }
 
 
+// ✅ API ลบ duplicate medicationschedule
+app.delete('/api/medicationschedule/duplicates', (req, res) => {
+  const userId = req.query.userId;
+  const dateParam = req.query.date;
+
+  if (!userId || !dateParam) {
+    return res.status(400).json({ 
+      error: 'missing userId or date query param' 
+    });
+  }
+
+  console.log(`🔍 Searching for duplicates on ${dateParam} for user ${userId}`);
+
+  // ✅ หาทุก record ที่ซ้ำกัน (MedicationID + Date + Time เหมือนกัน)
+  const findDuplicateSql = `
+    SELECT 
+      MedicationID,
+      Date,
+      Time,
+      COUNT(*) as count,
+      GROUP_CONCAT(ScheduleID) as scheduleIds
+    FROM medicationschedule ms
+    WHERE ms.MedicationID IN (
+      SELECT MedicationID FROM medication 
+      WHERE UserID = ? AND IsActive = 1
+    )
+    AND Date = ?
+    GROUP BY MedicationID, Date, Time
+    HAVING COUNT(*) > 1
+  `;
+
+  db.query(findDuplicateSql, [userId, dateParam], (err, duplicates) => {
+    if (err) {
+      console.error('❌ Error finding duplicates:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    console.log(`📊 Found ${duplicates.length} groups with duplicates`);
+
+    if (duplicates.length === 0) {
+      console.log('✅ No duplicates found');
+      return res.json({ 
+        message: 'No duplicates found',
+        deletedCount: 0 
+      });
+    }
+
+    let totalDeleted = 0;
+    let processedGroups = 0;
+
+    duplicates.forEach(dup => {
+      const scheduleIds = dup.scheduleIds.split(',');
+      // ✅ เก็บ ID แรก ลบที่เหลือ
+      const idsToDelete = scheduleIds.slice(1);
+
+      console.log(`🗑️ Found ${dup.count} duplicates for MedicationID ${dup.MedicationID} at ${dup.Time}`);
+      console.log(`   Keeping ScheduleID: ${scheduleIds[0]}, Deleting: ${idsToDelete.join(', ')}`);
+
+      const deleteSql = `
+        DELETE FROM medicationschedule 
+        WHERE ScheduleID IN (${idsToDelete.map(() => '?').join(',')})
+      `;
+
+      db.query(deleteSql, idsToDelete, (delErr, delResult) => {
+        if (delErr) {
+          console.error(`❌ Error deleting duplicates:`, delErr);
+        } else {
+          console.log(`✅ Deleted ${delResult.affectedRows} duplicate records`);
+          totalDeleted += delResult.affectedRows;
+        }
+
+        processedGroups++;
+        
+        // ✅ เมื่อลบเสร็จทั้งหมด ให้ส่ง response
+        if (processedGroups === duplicates.length) {
+          console.log(`🎉 Total deleted: ${totalDeleted} duplicate records`);
+          res.json({
+            message: 'Duplicates removed successfully',
+            duplicateGroupsFound: duplicates.length,
+            totalRecordsDeleted: totalDeleted,
+            details: duplicates.map(d => ({
+              medicationId: d.MedicationID,
+              date: d.Date,
+              time: d.Time,
+              duplicateCount: d.count,
+              scheduleIds: d.scheduleIds.split(',')
+            }))
+          });
+        }
+      });
+    });
+  });
+});
+
+
 app.get('/api/reminders/today', (req, res) => {
   const userId = req.query.userId;
   if (!userId) {
@@ -771,80 +866,279 @@ app.get('/api/reminders/today', (req, res) => {
 
   console.log(`📅 Fetching reminders for user ${userId} on ${dateParam}`);
 
-  // ✅ สร้าง schedules ก่อนถ้าไม่มี
-  const ensureSchedules = async () => {
-    try {
-      // ดึงยาทั้งหมดที่ active
-      const [medications] = await db.promise().query(
-        `SELECT 
-           m.MedicationID,
-           m.Name,
-           m.FrequencyValue,
-           m.CustomValue,
-           m.WeekDays,
-           m.MonthDays,
-           m.Cycle_Use_Days,
-           m.Cycle_Rest_Days,
-           m.OnDemand,
-           m.StartDate,
-           m.EndDate,
-           m.StartTime,
-           mdt.defaulttime_id,
-           udt.Time
-         FROM medication m
-         LEFT JOIN medication_defaulttime mdt ON m.MedicationID = mdt.medicationid
-         LEFT JOIN userdefaultmealtime udt ON mdt.defaulttime_id = udt.DefaultTime_ID
-         WHERE m.UserID = ? AND m.IsActive = 1
-         AND (m.StartDate IS NULL OR m.StartDate <= ?)
-         AND (m.EndDate IS NULL OR m.EndDate >= ?)`,
-        [userId, dateParam, dateParam]
-      );
+  // ✅ ฟังก์ชันคำนวณว่าควรมียาในวันนี้หรือไม่
+  const shouldHaveMedicationOnDate = (dateStr, frequencyValue, startDateStr, endDateStr, customValue, weekDaysArr, monthDaysArr, cycleUse, cycleRest, onDemand) => {
+    if (onDemand) return false;
+
+    const checkDate = new Date(dateStr);
+    const startDate = startDateStr ? new Date(startDateStr) : null;
+    const endDate = endDateStr ? new Date(endDateStr) : null;
+
+    if (startDate && checkDate < startDate) return false;
+    if (endDate && checkDate > endDate) return false;
+
+    const dayOfWeek = checkDate.getDay();
+    const dayOfMonth = checkDate.getDate();
+
+    switch (frequencyValue) {
+      case 'every_day':
+      case 'every_X_hours':
+        return true;
+
+      case 'every_X_days': {
+        if (!startDate) return false;
+        const diffTime = checkDate - startDate;
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        const interval = parseInt(customValue, 10);
+        return diffDays % interval === 0;
+      }
+
+      case 'weekly': {
+        if (!Array.isArray(weekDaysArr) || weekDaysArr.length === 0) return false;
+        const normalizedWeekDays = weekDaysArr.map(d => {
+          const day = parseInt(d, 10);
+          return day === 7 ? 0 : day;
+        });
+        return normalizedWeekDays.includes(dayOfWeek);
+      }
+
+      case 'monthly': {
+        if (Array.isArray(monthDaysArr) && monthDaysArr.length > 0) {
+          return monthDaysArr.includes(dayOfMonth);
+        }
+        const dayNum = parseInt(customValue, 10);
+        return dayOfMonth === dayNum;
+      }
+
+      case 'cycle': {
+        if (!startDate) return false;
+        const useDays = parseInt(cycleUse, 10);
+        const restDays = parseInt(cycleRest, 10);
+        if (isNaN(useDays) || isNaN(restDays)) return false;
+
+        const diffTime = checkDate - startDate;
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        const cycleLength = useDays + restDays;
+        const dayInCycle = diffDays % cycleLength;
+
+        return dayInCycle < useDays;
+      }
+
+      default:
+        return false;
+    }
+  };
+
+  // ✅ สร้าง schedules ก่อนถ้าไม่มี (ตัวเดียวเท่านั้น!)
+  const ensureSchedules = () => {
+  return new Promise((resolve, reject) => {
+    const medSql = `
+      SELECT 
+        m.MedicationID,
+        m.Name,
+        m.FrequencyValue,
+        m.CustomValue,
+        m.WeekDays,
+        m.MonthDays,
+        m.Cycle_Use_Days,
+        m.Cycle_Rest_Days,
+        m.OnDemand,
+        m.StartDate,
+        m.EndDate,
+        m.StartTime,
+        mdt.defaulttime_id,
+        udt.Time
+      FROM medication m
+      LEFT JOIN medication_defaulttime mdt ON m.MedicationID = mdt.medicationid
+      LEFT JOIN userdefaultmealtime udt ON mdt.defaulttime_id = udt.DefaultTime_ID
+      WHERE m.UserID = ? AND m.IsActive = 1
+      AND (m.StartDate IS NULL OR m.StartDate <= ?)
+      AND (m.EndDate IS NULL OR m.EndDate >= ?)
+    `;
+
+    db.query(medSql, [userId, dateParam, dateParam], (err, medications) => {
+      if (err) {
+        console.error('❌ Error fetching medications:', err);
+        return reject(err);
+      }
 
       console.log(`📊 Found ${medications.length} medications to check`);
 
-      // ตรวจสอบและสร้าง schedule สำหรับแต่ละยา
-      for (const med of medications) {
-        // ตรวจสอบว่ามี schedule ในวันนี้หรือไม่
-        const [existingSchedule] = await db.promise().query(
-          `SELECT COUNT(*) as count FROM medicationschedule 
-           WHERE MedicationID = ? AND Date = ?`,
-          [med.MedicationID, dateParam]
-        );
+      if (medications.length === 0) {
+        console.log('✅ No medications to process');
+        return resolve();
+      }
 
-        if (existingSchedule[0].count === 0) {
-          console.log(`🔍 No schedule for ${med.Name}, creating...`);
+      let completedCount = 0;
 
-          // สร้าง schedule ใหม่
+      medications.forEach(med => {
+        // ✅ ตรวจสอบแบบเข้มงวด: ต้องไม่มี schedule เดือดเดี่ยว
+        const checkSql = `
+          SELECT ScheduleID FROM medicationschedule 
+          WHERE MedicationID = ? AND Date = ?
+          LIMIT 1
+        `;
+
+        db.query(checkSql, [med.MedicationID, dateParam], (checkErr, checkResult) => {
+          if (checkErr) {
+            console.error('❌ Error checking schedule:', checkErr);
+            completedCount++;
+            if (completedCount === medications.length) resolve();
+            return;
+          }
+
+          // ✅ ถ้ามี schedule แล้ว ให้ข้ามไป
+          if (checkResult && checkResult.length > 0) {
+            console.log(`✅ Schedule already exists for MedicationID ${med.MedicationID} (ScheduleID: ${checkResult[0].ScheduleID})`);
+            completedCount++;
+            if (completedCount === medications.length) resolve();
+            return;
+          }
+
+          let weekDays = null;
+          let monthDays = null;
+          try { weekDays = med.WeekDays ? JSON.parse(med.WeekDays) : null; } catch (e) { weekDays = null; }
+          try { monthDays = med.MonthDays ? JSON.parse(med.MonthDays) : null; } catch (e) { monthDays = null; }
+
+          const shouldCreate = shouldHaveMedicationOnDate(
+            dateParam,
+            med.FrequencyValue,
+            med.StartDate,
+            med.EndDate,
+            med.CustomValue,
+            weekDays,
+            monthDays,
+            med.Cycle_Use_Days,
+            med.Cycle_Rest_Days,
+            med.OnDemand === 1
+          );
+
+          if (!shouldCreate) {
+            console.log(`⏭️ Skipping ${med.Name} - not scheduled for ${dateParam}`);
+            completedCount++;
+            if (completedCount === medications.length) resolve();
+            return;
+          }
+
+          console.log(`✅ Creating NEW schedule for ${med.Name} (${med.FrequencyValue}) on ${dateParam}`);
+
+          // ✅ สร้าง schedule ตามประเภทความถี่
           if (med.FrequencyValue === 'every_X_hours' && med.StartTime) {
-            // สำหรับ every_X_hours
             const hours = parseInt(med.CustomValue, 10);
             const times = generateHourlyTimesForDate(med.StartTime, hours, dateParam, med.StartDate);
+            let insertedCount = 0;
 
-            for (const timeStr of times) {
-              await db.promise().query(
-                `INSERT IGNORE INTO medicationschedule 
-                 (MedicationID, DefaultTime_ID, Date, Time, Status)
-                 VALUES (?, NULL, ?, ?, 'รอกิน')`,
-                [med.MedicationID, dateParam, timeStr]
-              );
+            if (times.length === 0) {
+              console.warn(`⚠️ No times generated for ${med.Name}`);
+              completedCount++;
+              if (completedCount === medications.length) resolve();
+              return;
             }
-            console.log(`✅ Created ${times.length} schedules for ${med.Name}`);
+
+            console.log(`🕐 Generating ${times.length} time slots for ${med.Name}`);
+
+            times.forEach((timeStr, idx) => {
+              // ✅ ตรวจสอบซ้ำก่อน INSERT เพื่อให้ชัวร์
+              const doubleCheckSql = `
+                SELECT ScheduleID FROM medicationschedule 
+                WHERE MedicationID = ? AND Date = ? AND Time = ?
+                LIMIT 1
+              `;
+
+              db.query(doubleCheckSql, [med.MedicationID, dateParam, timeStr], (doubleCheckErr, doubleCheckResult) => {
+                if (doubleCheckErr) {
+                  console.error(`❌ Error double-checking schedule:`, doubleCheckErr);
+                  insertedCount++;
+                  if (insertedCount === times.length) {
+                    completedCount++;
+                    if (completedCount === medications.length) resolve();
+                  }
+                  return;
+                }
+
+                // ✅ ถ้ามี schedule ที่เวลานั้นแล้ว ให้ข้าม
+                if (doubleCheckResult && doubleCheckResult.length > 0) {
+                  console.log(`⚠️ Schedule already exists: ${med.Name} at ${timeStr} (ScheduleID: ${doubleCheckResult[0].ScheduleID})`);
+                  insertedCount++;
+                  if (insertedCount === times.length) {
+                    completedCount++;
+                    if (completedCount === medications.length) resolve();
+                  }
+                  return;
+                }
+
+                // ✅ INSERT เมื่อมั่นใจว่าไม่มีอยู่
+                const insertSql = `
+                  INSERT INTO medicationschedule 
+                  (MedicationID, DefaultTime_ID, Date, Time, Status)
+                  VALUES (?, NULL, ?, ?, 'รอกิน')
+                `;
+                
+                db.query(insertSql, [med.MedicationID, dateParam, timeStr], (insertErr, insertResult) => {
+                  if (insertErr) {
+                    console.error(`❌ Error inserting schedule for ${timeStr}:`, insertErr);
+                  } else {
+                    console.log(`✅ Inserted: ${med.Name} at ${timeStr} (ID: ${insertResult.insertId})`);
+                  }
+                  insertedCount++;
+                  
+                  if (insertedCount === times.length) {
+                    completedCount++;
+                    if (completedCount === medications.length) resolve();
+                  }
+                });
+              });
+            });
           } else if (med.defaulttime_id && med.Time) {
-            // สำหรับแบบเวลาปกติ
-            await db.promise().query(
-              `INSERT IGNORE INTO medicationschedule 
-               (MedicationID, DefaultTime_ID, Date, Time, Status)
-               VALUES (?, ?, ?, ?, 'รอกิน')`,
-              [med.MedicationID, med.defaulttime_id, dateParam, med.Time]
-            );
-            console.log(`✅ Created schedule for ${med.Name} at ${med.Time}`);
+            // ✅ ตรวจสอบซ้ำสำหรับความถี่อื่น
+            const doubleCheckSql = `
+              SELECT ScheduleID FROM medicationschedule 
+              WHERE MedicationID = ? AND Date = ? AND DefaultTime_ID = ?
+              LIMIT 1
+            `;
+
+            db.query(doubleCheckSql, [med.MedicationID, dateParam, med.defaulttime_id], (doubleCheckErr, doubleCheckResult) => {
+              if (doubleCheckErr) {
+                console.error(`❌ Error double-checking schedule:`, doubleCheckErr);
+                completedCount++;
+                if (completedCount === medications.length) resolve();
+                return;
+              }
+
+              // ✅ ถ้ามีแล้ว ให้ข้าม
+              if (doubleCheckResult && doubleCheckResult.length > 0) {
+                console.log(`⚠️ Schedule already exists for DefaultTime_ID ${med.defaulttime_id}`);
+                completedCount++;
+                if (completedCount === medications.length) resolve();
+                return;
+              }
+
+              // ✅ INSERT
+              const insertSql = `
+                INSERT INTO medicationschedule 
+                (MedicationID, DefaultTime_ID, Date, Time, Status)
+                VALUES (?, ?, ?, ?, 'รอกิน')
+              `;
+              
+              db.query(insertSql, [med.MedicationID, med.defaulttime_id, dateParam, med.Time], (insertErr, insertResult) => {
+                if (insertErr) {
+                  console.error(`❌ Error inserting schedule:`, insertErr);
+                } else {
+                  console.log(`✅ Inserted: ${med.Name} at ${med.Time} (ID: ${insertResult.insertId})`);
+                }
+                completedCount++;
+                if (completedCount === medications.length) resolve();
+              });
+            });
+          } else {
+            completedCount++;
+            if (completedCount === medications.length) resolve();
           }
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error ensuring schedules:', error);
-    }
-  };
+        });
+      });
+    });
+  });
+};
 
   // รอให้สร้าง schedules เสร็จก่อน
   ensureSchedules().then(() => {
@@ -919,7 +1213,6 @@ app.get('/api/reminders/today', (req, res) => {
         return res.json([]);
       }
 
-      // ✅ ตรวจสอบว่าไม่มี duplicate ScheduleID
       const seenSchedules = new Set();
       const filtered = (rows || [])
         .filter(r => {
@@ -962,219 +1255,222 @@ app.get('/api/reminders/today', (req, res) => {
       hasResponded = true;
       res.json(filtered);
     });
+  }).catch(err => {
+    console.error('❌ Error in ensureSchedules:', err);
+    res.status(500).json({ error: 'Failed to create schedules' });
   });
 });
 
 // ✅ ฟังก์ชัน async สำหรับสร้าง schedules โดยไม่ส่ง response ซ้ำ
-const createSchedulesAsync = (rows, dateParam, userId) => {
-  const needSchedules = new Map();
+// const createSchedulesAsync = (rows, dateParam, userId) => {
+//   const needSchedules = new Map();
 
-  rows.forEach(r => {
-    const currentDate = new Date(dateParam);
-    const startDate = r.StartDate ? new Date(r.StartDate) : null;
-    const endDate = r.EndDate ? new Date(r.EndDate) : null;
+//   rows.forEach(r => {
+//     const currentDate = new Date(dateParam);
+//     const startDate = r.StartDate ? new Date(r.StartDate) : null;
+//     const endDate = r.EndDate ? new Date(r.EndDate) : null;
 
-    if (startDate && currentDate < startDate) return;
-    if (endDate && currentDate > endDate) return;
+//     if (startDate && currentDate < startDate) return;
+//     if (endDate && currentDate > endDate) return;
 
-    if (r.FrequencyValue === 'every_X_hours') {
-      const key = `${r.MedicationID}_hourly`;
+//     if (r.FrequencyValue === 'every_X_hours') {
+//       const key = `${r.MedicationID}_hourly`;
       
-      if (!r.ScheduleID && !needSchedules.has(key)) {
-        console.log(`🔍 Found every_X_hours medication without schedule: ${r.name} (ID: ${r.MedicationID})`);
+//       if (!r.ScheduleID && !needSchedules.has(key)) {
+//         console.log(`🔍 Found every_X_hours medication without schedule: ${r.name} (ID: ${r.MedicationID})`);
         
-        let weekDays = null;
-        let monthDays = null;
-        try { weekDays = r.WeekDays ? JSON.parse(r.WeekDays) : null; } catch (e) { weekDays = null; }
-        try { monthDays = r.MonthDays ? JSON.parse(r.MonthDays) : null; } catch (e) { monthDays = null; }
+//         let weekDays = null;
+//         let monthDays = null;
+//         try { weekDays = r.WeekDays ? JSON.parse(r.WeekDays) : null; } catch (e) { weekDays = null; }
+//         try { monthDays = r.MonthDays ? JSON.parse(r.MonthDays) : null; } catch (e) { monthDays = null; }
 
-        needSchedules.set(key, {
-          MedicationID: r.MedicationID,
-          Name: r.name,
-          DefaultTime_ID: null,
-          Time: null,
-          FrequencyValue: r.FrequencyValue,
-          CustomValue: r.CustomValue,
-          WeekDays: weekDays,
-          MonthDays: monthDays,
-          Cycle_Use_Days: r.Cycle_Use_Days,
-          Cycle_Rest_Days: r.Cycle_Rest_Days,
-          OnDemand: r.OnDemand === 1,
-          StartDate: r.StartDate,
-          EndDate: r.EndDate,
-          StartTime: r.StartTime
-        });
-      }
-    } else {
-      if (!r.ScheduleID && r.DefaultTime_ID) {
-        const key = `${r.MedicationID}_${r.DefaultTime_ID}`;
+//         needSchedules.set(key, {
+//           MedicationID: r.MedicationID,
+//           Name: r.name,
+//           DefaultTime_ID: null,
+//           Time: null,
+//           FrequencyValue: r.FrequencyValue,
+//           CustomValue: r.CustomValue,
+//           WeekDays: weekDays,
+//           MonthDays: monthDays,
+//           Cycle_Use_Days: r.Cycle_Use_Days,
+//           Cycle_Rest_Days: r.Cycle_Rest_Days,
+//           OnDemand: r.OnDemand === 1,
+//           StartDate: r.StartDate,
+//           EndDate: r.EndDate,
+//           StartTime: r.StartTime
+//         });
+//       }
+//     } else {
+//       if (!r.ScheduleID && r.DefaultTime_ID) {
+//         const key = `${r.MedicationID}_${r.DefaultTime_ID}`;
         
-        if (!needSchedules.has(key)) {
-          let weekDays = null;
-          let monthDays = null;
-          try { weekDays = r.WeekDays ? JSON.parse(r.WeekDays) : null; } catch (e) { weekDays = null; }
-          try { monthDays = r.MonthDays ? JSON.parse(r.MonthDays) : null; } catch (e) { monthDays = null; }
+//         if (!needSchedules.has(key)) {
+//           let weekDays = null;
+//           let monthDays = null;
+//           try { weekDays = r.WeekDays ? JSON.parse(r.WeekDays) : null; } catch (e) { weekDays = null; }
+//           try { monthDays = r.MonthDays ? JSON.parse(r.MonthDays) : null; } catch (e) { monthDays = null; }
 
-          needSchedules.set(key, {
-            MedicationID: r.MedicationID,
-            Name: r.name,
-            DefaultTime_ID: r.DefaultTime_ID,
-            Time: r.Time,
-            FrequencyValue: r.FrequencyValue,
-            CustomValue: r.CustomValue,
-            WeekDays: weekDays,
-            MonthDays: monthDays,
-            Cycle_Use_Days: r.Cycle_Use_Days,
-            Cycle_Rest_Days: r.Cycle_Rest_Days,
-            OnDemand: r.OnDemand === 1,
-            StartDate: r.StartDate,
-            EndDate: r.EndDate,
-            StartTime: r.StartTime
-          });
-        }
-      }
-    }
-  });
+//           needSchedules.set(key, {
+//             MedicationID: r.MedicationID,
+//             Name: r.name,
+//             DefaultTime_ID: r.DefaultTime_ID,
+//             Time: r.Time,
+//             FrequencyValue: r.FrequencyValue,
+//             CustomValue: r.CustomValue,
+//             WeekDays: weekDays,
+//             MonthDays: monthDays,
+//             Cycle_Use_Days: r.Cycle_Use_Days,
+//             Cycle_Rest_Days: r.Cycle_Rest_Days,
+//             OnDemand: r.OnDemand === 1,
+//             StartDate: r.StartDate,
+//             EndDate: r.EndDate,
+//             StartTime: r.StartTime
+//           });
+//         }
+//       }
+//     }
+//   });
 
-  const toInsert = Array.from(needSchedules.values());
+//   const toInsert = Array.from(needSchedules.values());
   
-  console.log(`📝 Need to create schedules for ${toInsert.length} medication entries`);
+//   console.log(`📝 Need to create schedules for ${toInsert.length} medication entries`);
 
-  const shouldHaveMedicationOnDate = (dateStr, frequencyValue, startDateStr, endDateStr, customValue, weekDaysArr, monthDaysArr, cycleUse, cycleRest, onDemand) => {
-    if (onDemand) return false;
+//   const shouldHaveMedicationOnDate = (dateStr, frequencyValue, startDateStr, endDateStr, customValue, weekDaysArr, monthDaysArr, cycleUse, cycleRest, onDemand) => {
+//     if (onDemand) return false;
 
-    const checkDate = new Date(dateStr);
-    const startDate = startDateStr ? new Date(startDateStr) : null;
-    const endDate = endDateStr ? new Date(endDateStr) : null;
+//     const checkDate = new Date(dateStr);
+//     const startDate = startDateStr ? new Date(startDateStr) : null;
+//     const endDate = endDateStr ? new Date(endDateStr) : null;
 
-    if (startDate && checkDate < startDate) return false;
-    if (endDate && checkDate > endDate) return false;
+//     if (startDate && checkDate < startDate) return false;
+//     if (endDate && checkDate > endDate) return false;
 
-    const dayOfWeek = checkDate.getDay();
-    const dayOfMonth = checkDate.getDate();
+//     const dayOfWeek = checkDate.getDay();
+//     const dayOfMonth = checkDate.getDate();
 
-    switch (frequencyValue) {
-      case 'every_day':
-      case 'every_X_hours':
-        return true;
+//     switch (frequencyValue) {
+//       case 'every_day':
+//       case 'every_X_hours':
+//         return true;
 
-      case 'every_X_days': {
-        if (!startDate) return false;
-        const diffTime = checkDate - startDate;
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        const interval = parseInt(customValue, 10);
-        return diffDays % interval === 0;
-      }
+//       case 'every_X_days': {
+//         if (!startDate) return false;
+//         const diffTime = checkDate - startDate;
+//         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+//         const interval = parseInt(customValue, 10);
+//         return diffDays % interval === 0;
+//       }
 
-      case 'weekly': {
-        if (!Array.isArray(weekDaysArr) || weekDaysArr.length === 0) return false;
-        const normalizedWeekDays = weekDaysArr.map(d => {
-          const day = parseInt(d, 10);
-          return day === 7 ? 0 : day;
-        });
-        return normalizedWeekDays.includes(dayOfWeek);
-      }
+//       case 'weekly': {
+//         if (!Array.isArray(weekDaysArr) || weekDaysArr.length === 0) return false;
+//         const normalizedWeekDays = weekDaysArr.map(d => {
+//           const day = parseInt(d, 10);
+//           return day === 7 ? 0 : day;
+//         });
+//         return normalizedWeekDays.includes(dayOfWeek);
+//       }
 
-      case 'monthly': {
-        if (Array.isArray(monthDaysArr) && monthDaysArr.length > 0) {
-          return monthDaysArr.includes(dayOfMonth);
-        }
-        const dayNum = parseInt(customValue, 10);
-        return dayOfMonth === dayNum;
-      }
+//       case 'monthly': {
+//         if (Array.isArray(monthDaysArr) && monthDaysArr.length > 0) {
+//           return monthDaysArr.includes(dayOfMonth);
+//         }
+//         const dayNum = parseInt(customValue, 10);
+//         return dayOfMonth === dayNum;
+//       }
 
-      case 'cycle': {
-        if (!startDate) return false;
-        const useDays = parseInt(cycleUse, 10);
-        const restDays = parseInt(cycleRest, 10);
-        if (isNaN(useDays) || isNaN(restDays)) return false;
+//       case 'cycle': {
+//         if (!startDate) return false;
+//         const useDays = parseInt(cycleUse, 10);
+//         const restDays = parseInt(cycleRest, 10);
+//         if (isNaN(useDays) || isNaN(restDays)) return false;
 
-        const diffTime = checkDate - startDate;
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        const cycleLength = useDays + restDays;
-        const dayInCycle = diffDays % cycleLength;
+//         const diffTime = checkDate - startDate;
+//         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+//         const cycleLength = useDays + restDays;
+//         const dayInCycle = diffDays % cycleLength;
 
-        return dayInCycle < useDays;
-      }
+//         return dayInCycle < useDays;
+//       }
 
-      default:
-        return false;
-    }
-  };
+//       default:
+//         return false;
+//     }
+//   };
 
 
-  const insertTasks = [];
-  toInsert.forEach(entry => {
-    const shouldCreate = shouldHaveMedicationOnDate(
-      dateParam,
-      entry.FrequencyValue,
-      entry.StartDate,
-      entry.EndDate,
-      entry.CustomValue,
-      entry.WeekDays,
-      entry.MonthDays,
-      entry.Cycle_Use_Days,
-      entry.Cycle_Rest_Days,
-      entry.OnDemand
-    );
+//   const insertTasks = [];
+//   toInsert.forEach(entry => {
+//     const shouldCreate = shouldHaveMedicationOnDate(
+//       dateParam,
+//       entry.FrequencyValue,
+//       entry.StartDate,
+//       entry.EndDate,
+//       entry.CustomValue,
+//       entry.WeekDays,
+//       entry.MonthDays,
+//       entry.Cycle_Use_Days,
+//       entry.Cycle_Rest_Days,
+//       entry.OnDemand
+//     );
 
-    if (!shouldCreate) {
-      console.log(`⏭️ Skipping ${entry.Name} - not scheduled for ${dateParam}`);
-      return;
-    }
+//     if (!shouldCreate) {
+//       console.log(`⏭️ Skipping ${entry.Name} - not scheduled for ${dateParam}`);
+//       return;
+//     }
 
-    console.log(`✅ Creating schedule for ${entry.Name} on ${dateParam}`);
+//     console.log(`✅ Creating schedule for ${entry.Name} on ${dateParam}`);
 
-    if (entry.FrequencyValue === 'every_X_hours' && entry.StartTime) {
-      const hours = parseInt(entry.CustomValue, 10);
-      const times = generateHourlyTimesForDate(entry.StartTime, hours, dateParam, entry.StartDate);
+//     if (entry.FrequencyValue === 'every_X_hours' && entry.StartTime) {
+//       const hours = parseInt(entry.CustomValue, 10);
+//       const times = generateHourlyTimesForDate(entry.StartTime, hours, dateParam, entry.StartDate);
       
-      console.log(`📅 Creating ${times.length} schedules for ${entry.Name} on ${dateParam}`);
+//       console.log(`📅 Creating ${times.length} schedules for ${entry.Name} on ${dateParam}`);
       
-      times.forEach(timeStr => {
-        const insertSql = `
-          INSERT IGNORE INTO medicationschedule (MedicationID, DefaultTime_ID, Date, Time, Status)
-          VALUES (?, NULL, ?, ?, 'รอกิน')
-        `;
-        const params = [entry.MedicationID, dateParam, timeStr];
+//       times.forEach(timeStr => {
+//         const insertSql = `
+//           INSERT IGNORE INTO medicationschedule (MedicationID, DefaultTime_ID, Date, Time, Status)
+//           VALUES (?, NULL, ?, ?, 'รอกิน')
+//         `;
+//         const params = [entry.MedicationID, dateParam, timeStr];
 
-        insertTasks.push(new Promise((resolve) => {
-          db.query(insertSql, params, (err3, result3) => {
-            if (err3) {
-              console.error(`❌ Error inserting hourly schedule for ${dateParam} ${timeStr}:`, err3);
-            } else if (result3.affectedRows > 0) {
-              console.log(`✅ Inserted schedule: ${entry.Name} at ${dateParam} ${timeStr}`);
-            }
-            resolve();
-          });
-        }));
-      });
-    } else {
-      const insertSql = `
-        INSERT IGNORE INTO medicationschedule (MedicationID, DefaultTime_ID, Date, Time, Status)
-        VALUES (?, ?, ?, ?, 'รอกิน')
-      `;
-      const params = [entry.MedicationID, entry.DefaultTime_ID, dateParam, entry.Time];
+//         insertTasks.push(new Promise((resolve) => {
+//           db.query(insertSql, params, (err3, result3) => {
+//             if (err3) {
+//               console.error(`❌ Error inserting hourly schedule for ${dateParam} ${timeStr}:`, err3);
+//             } else if (result3.affectedRows > 0) {
+//               console.log(`✅ Inserted schedule: ${entry.Name} at ${dateParam} ${timeStr}`);
+//             }
+//             resolve();
+//           });
+//         }));
+//       });
+//     } else {
+//       const insertSql = `
+//         INSERT IGNORE INTO medicationschedule (MedicationID, DefaultTime_ID, Date, Time, Status)
+//         VALUES (?, ?, ?, ?, 'รอกิน')
+//       `;
+//       const params = [entry.MedicationID, entry.DefaultTime_ID, dateParam, entry.Time];
 
-      insertTasks.push(new Promise((resolve) => {
-        db.query(insertSql, params, (err3, result3) => {
-          if (err3) {
-            console.error('❌ Error inserting schedule:', err3);
-          } else if (result3.affectedRows > 0) {
-            console.log(`✅ Inserted schedule: ${entry.Name} at ${dateParam} ${entry.Time}`);
-          }
-          resolve();
-        });
-      }));
-    }
-  });
+//       insertTasks.push(new Promise((resolve) => {
+//         db.query(insertSql, params, (err3, result3) => {
+//           if (err3) {
+//             console.error('❌ Error inserting schedule:', err3);
+//           } else if (result3.affectedRows > 0) {
+//             console.log(`✅ Inserted schedule: ${entry.Name} at ${dateParam} ${entry.Time}`);
+//           }
+//           resolve();
+//         });
+//       }));
+//     }
+//   });
 
-  Promise.all(insertTasks).then(() => {
-    console.log(`✅ Completed ${insertTasks.length} schedule insertions`);
-  }).catch(errPromise => {
-    console.error('❌ Error processing schedule inserts:', errPromise);
-  });
-};
+//   Promise.all(insertTasks).then(() => {
+//     console.log(`✅ Completed ${insertTasks.length} schedule insertions`);
+//   }).catch(errPromise => {
+//     console.error('❌ Error processing schedule inserts:', errPromise);
+//   });
+// };
 
 const generateHourlyTimesForDate = (startTime, hours, targetDate, startDateStr) => {
   if (!startTime || !hours) {
