@@ -51,6 +51,9 @@ const EditMedicationScreen = ({ navigation, route }) => {
   const [groups, setGroups] = useState([]);
   const [units, setUnits] = useState([]);
   const [types, setTypes] = useState([]);
+  const [startTime, setStartTime] = useState(new Date());
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  
 
   const extractId = (obj) => {
     if (!obj) return null;
@@ -63,44 +66,60 @@ const EditMedicationScreen = ({ navigation, route }) => {
   };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const userId = await AsyncStorage.getItem('userId');
-        const q = userId ? `?userId=${userId}` : '';
-        const [gRes, uRes, tRes, timesRes] = await Promise.all([
-          fetch(`${BASE_URL}/api/groups${q}`).then(r => r.json()),
-          fetch(`${BASE_URL}/api/units${q}`).then(r => r.json()),
-          fetch(`${BASE_URL}/api/types${q}`).then(r => r.json()),
-          fetch(`${BASE_URL}/api/userdefaultmealtime`).then(r => r.json())
-        ]);
-        setGroups(Array.isArray(gRes) ? gRes : []);
-        setUnits(Array.isArray(uRes) ? uRes : []);
-        setTypes(Array.isArray(tRes) ? tRes : []);
-        setDefaultTimes(Array.isArray(timesRes) ? timesRes : []);
-      } catch (e) {
-        console.warn('Failed to load metadata', e);
-      }
-      if (medId) await loadMedication(medId);
-      setLoading(false);
-    })();
-  }, [medId]);
+  (async () => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const q = userId ? `?userId=${userId}` : '';
+      
+      console.log('🔍 Fetching metadata...');
+      
+      const [gRes, uRes, tRes, timesRes] = await Promise.all([
+        fetch(`${BASE_URL}/api/groups${q}`).then(r => r.json()),
+        fetch(`${BASE_URL}/api/units${q}`).then(r => r.json()),
+        fetch(`${BASE_URL}/api/types${q}`).then(r => r.json()),
+        fetch(`${BASE_URL}/api/userdefaultmealtime/${userId}`).then(r => r.json())
+      ]);
+      
+      console.log('✅ Groups:', gRes);
+      console.log('✅ Units:', uRes);
+      console.log('✅ Types:', tRes);
+      console.log('✅ Times:', timesRes);
+      
+      setGroups(Array.isArray(gRes) ? gRes : []);
+      setUnits(Array.isArray(uRes) ? uRes : []);
+      setTypes(Array.isArray(tRes) ? tRes : []);
+      setDefaultTimes(Array.isArray(timesRes) ? timesRes : []);
+      
+    } catch (e) {
+      console.error('❌ Failed to load metadata:', e);
+      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถโหลดข้อมูลได้');
+    }
+    
+    if (medId) await loadMedication(medId);
+    setLoading(false);
+  })();
+}, [medId]);
 
   const loadMedication = async (id) => {
     try {
+      console.log('🔍 Loading medication ID:', id);
+      
       const res = await fetch(`${BASE_URL}/api/medications/${id}`);
       if (!res.ok) {
-        console.warn('Failed to fetch medication', await res.text());
+        console.warn('❌ Failed to fetch medication:', await res.text());
+        Alert.alert('ข้อผิดพลาด', 'ไม่พบข้อมูลยานี้');
         return;
       }
+      
       const data = await res.json();
-      console.log('🔍 loadMedication data:', data);
+      console.log('✅ Medication data:', data);
 
       setName(data.Name ?? '');
       setNote(data.Note ?? '');
-      setGroupID(String(data.GroupID ?? ''));
-      setTypeID(data.TypeID ?? null);
-      setDosage(data.Dosage ? String(data.Dosage) : '');
+      setGroupID(data.GroupID ? String(data.GroupID) : '');
+      setTypeID(data.TypeID ? String(data.TypeID) : null);
       setUnitID(data.UnitID ? String(data.UnitID) : '');
+      setDosage(data.Dosage ? String(data.Dosage) : '');
       setUsageMealID(data.UsageMealID ?? null);
       setPriority(data.Priority ? (data.Priority === 2 ? 'สูง' : 'ปกติ') : 'ปกติ');
       
@@ -118,15 +137,30 @@ const EditMedicationScreen = ({ navigation, route }) => {
         setCustomTime('');
       }
 
-      const defaultTimeIds = Array.isArray(data.defaultTimes) 
-        ? data.defaultTimes 
-        : (Array.isArray(data.DefaultTimeIDs) ? data.DefaultTimeIDs : []);
-      setSelectedTimeIds(defaultTimeIds);
+      // ✅ ดึง DefaultTimeIDs
+      const timesRes = await fetch(`${BASE_URL}/api/medications/${id}/times`);
+      if (timesRes.ok) {
+        const timesData = await timesRes.json();
+        const timeIds = timesData.map(t => t.DefaultTime_ID);
+        console.log('✅ Default Time IDs:', timeIds);
+        setSelectedTimeIds(timeIds);
+      } else {
+        setSelectedTimeIds([]);
+      }
 
       const freq = data.Frequency ?? data.FrequencyValue ?? 'every_day';
       setFrequency(freq);
-      setIsFrequencyWithCustomTime(['every_X_days','every_X_hours','every_X_minutes'].includes(freq));
+      setIsFrequencyWithCustomTime(['every_X_days','every_X_hours'].includes(freq));
       setCustomValue(data.CustomValue ? String(data.CustomValue) : '');
+      
+      // ✅ โหลด StartTime ถ้าเป็น every_X_hours
+      if (freq === 'every_X_hours' && data.StartTime) {
+        const [h, m] = data.StartTime.split(':');
+        const time = new Date();
+        time.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
+        setStartTime(time);
+      }
+      
       setSelectedWeekDays(Array.isArray(data.WeekDays) ? data.WeekDays : []);
 
       // จัดการ MonthDays
@@ -151,8 +185,9 @@ const EditMedicationScreen = ({ navigation, route }) => {
       
       if (data.StartDate) setStartDate(new Date(data.StartDate));
       if (data.EndDate) setEndDate(new Date(data.EndDate));
+      
     } catch (e) {
-      console.error('Load medication error', e);
+      console.error('❌ Load medication error:', e);
       Alert.alert('เกิดข้อผิดพลาด', 'ไม่สามารถโหลดข้อมูลยาได้');
     }
   };
@@ -189,19 +224,37 @@ const EditMedicationScreen = ({ navigation, route }) => {
   };
 
   const handleSave = async () => {
-    if (!name || !typeID || selectedTimeIds.length === 0 || !groupID) {
-      Alert.alert('กรุณากรอกข้อมูลให้ครบ');
+    if (!name || !typeID || !groupID) {
+      Alert.alert('กรุณากรอกข้อมูลให้ครบ', 'ชื่อยา, ประเภทยา และกลุ่มโรคเป็นข้อมูลที่จำเป็น');
       return;
     }
 
-    if ((usageMealID === 2 || usageMealID === 3)) {
-      const needMinutes =
-        prePostTime === null ||
-        prePostTime === undefined ||
-        (prePostTime === 'custom' && (!customTime || isNaN(parseInt(customTime, 10))));
-      if (needMinutes) {
-        Alert.alert('โปรดเลือกจำนวน "นาที" สำหรับก่อน/หลังอาหาร');
+    // ✅ ตรวจสอบความถี่ every_X_hours
+    if (frequency === 'every_X_hours') {
+      if (!customValue || isNaN(parseInt(customValue, 10))) {
+        Alert.alert('กรุณากรอกจำนวนชั่วโมง');
         return;
+      }
+      if (!startTime) {
+        Alert.alert('กรุณาเลือกเวลาที่เริ่มกินยา');
+        return;
+      }
+    } else {
+      // ตรวจสอบความถี่อื่นๆ
+      if (selectedTimeIds.length === 0) {
+        Alert.alert('กรุณาเลือกเวลาที่กินยา');
+        return;
+      }
+
+      if ((usageMealID === 2 || usageMealID === 3)) {
+        const needMinutes =
+          prePostTime === null ||
+          prePostTime === undefined ||
+          (prePostTime === 'custom' && (!customTime || isNaN(parseInt(customTime, 10))));
+        if (needMinutes) {
+          Alert.alert('โปรดเลือกจำนวน "นาที" สำหรับก่อน/หลังอาหาร');
+          return;
+        }
       }
     }
 
@@ -213,11 +266,11 @@ const EditMedicationScreen = ({ navigation, route }) => {
       Alert.alert('โปรดเลือกวันที่ของเดือนอย่างน้อย 1 วัน');
       return;
     }
-    if ((frequency === 'every_X_days' || frequency === 'every_X_hours' || frequency === 'every_X_minutes') && (!customValue || isNaN(parseInt(customValue, 10)))) {
+    if ((frequency === 'every_X_days' || frequency === 'every_X_hours') && (!customValue || isNaN(parseInt(customValue, 10)))) {
       Alert.alert('โปรดกรอกจำนวนสำหรับความถี่แบบกำหนดเอง');
       return;
     }
-    if (frequency === 'cycle' && (!cycleUseDays || !cycleRestDays || isNaN(parseInt(cycleUseDays, 10)) || isNaN(parseInt(cycleRestDays, 10)))) {
+    if (frequency === 'cycle' && (!cycleUseDays || !cycleRestDays)) {
       Alert.alert('โปรดกรอกจำนวนวันสำหรับวงจรการใช้/หยุดพัก');
       return;
     }
@@ -263,14 +316,18 @@ const EditMedicationScreen = ({ navigation, route }) => {
       TypeID: parseInt(typeID, 10),
       Dosage: dosage ? parseInt(dosage, 10) : null,
       UnitID: unitID ? parseInt(unitID, 10) : null,
-      UsageMealID: usageMealID ?? null,
+      UsageMealID: frequency === 'every_X_hours' ? null : (usageMealID ?? null),
       Priority: priority === 'สูง' ? 2 : 1,
       Frequency: frequency,
-      PrePostTime: prePostMinutes,
+      PrePostTime: frequency === 'every_X_hours' ? null : prePostMinutes,
       StartDate: formatLocalDate(startDate),
       EndDate: formatLocalDate(endDate),
       CustomValue: customValue || null,
-      ...defaultTimeFields,
+      // ✅ ส่ง StartTime ถ้าเป็น every_X_hours
+      ...(frequency === 'every_X_hours'
+        ? { StartTime: startTime.toTimeString().slice(0, 8) }
+        : defaultTimeFields
+      ),
       WeekDays: selectedWeekDays.length ? selectedWeekDays : null,
       MonthDays: uniqueMonthDays.length ? uniqueMonthDays : null,
       Cycle_Use_Days: cycleUseDays ? parseInt(cycleUseDays, 10) : null,
@@ -285,13 +342,15 @@ const EditMedicationScreen = ({ navigation, route }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      
       if (res.ok) {
-        Alert.alert('แก้ไขข้อมูลเรียบร้อย');
-        navigation.goBack();
+        Alert.alert('สำเร็จ', 'แก้ไขข้อมูลยาเรียบร้อยแล้ว', [
+          { text: 'ตกลง', onPress: () => navigation.goBack() }
+        ]);
       } else {
         const txt = await res.text();
         console.error('Edit failed', txt);
-        Alert.alert('เกิดข้อผิดพลาดในการบันทึก');
+        Alert.alert('เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกข้อมูลได้');
       }
     } catch (e) {
       console.error('Save error', e);
@@ -370,10 +429,12 @@ const EditMedicationScreen = ({ navigation, route }) => {
             <Picker
               selectedValue={typeID !== null && typeID !== undefined ? String(typeID) : ''}
               onValueChange={(v) => {
-                if (v === '') return setTypeID(null);
-                const num = Number(v);
-                setTypeID(!Number.isNaN(num) ? num : v);
-              }}
+      if (v === '') {
+        setTypeID(null);
+      } else {
+        setTypeID(v);
+      }
+    }}
               style={styles.picker}
             >
               <Picker.Item label="-- เลือกประเภทยา --" value="" />
@@ -469,9 +530,41 @@ const EditMedicationScreen = ({ navigation, route }) => {
               value={customValue}
               onChangeText={setCustomValue}
               keyboardType="numeric"
-              placeholder="กรอกจำนวน"
+              placeholder={frequency === 'every_X_hours' ? 'กรอกจำนวนชั่วโมง' : 'กรอกจำนวนวัน'}
               placeholderTextColor="#999"
             />
+          </View>
+        )}
+
+        {/* ✅ แสดง Time Picker สำหรับ every_X_hours */}
+        {frequency === 'every_X_hours' && (
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>เวลาที่เริ่มกิน <Text style={styles.required}>*</Text></Text>
+            <TouchableOpacity
+              style={styles.dateButton}
+              onPress={() => setShowStartTimePicker(true)}
+            >
+              <Text style={styles.dateButtonText}>
+                {startTime.toLocaleTimeString('th-TH', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </Text>
+            </TouchableOpacity>
+
+            {showStartTimePicker && (
+              <DateTimePicker
+                value={startTime}
+                mode="time"
+                is24Hour={true}
+                onChange={(event, selectedTime) => {
+                  setShowStartTimePicker(false);
+                  if (selectedTime) {
+                    setStartTime(selectedTime);
+                  }
+                }}
+              />
+            )}
           </View>
         )}
 
@@ -561,8 +654,9 @@ const EditMedicationScreen = ({ navigation, route }) => {
       </View>
 
       {/* Section: วิธีใช้ยา */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>💊 วิธีการใช้ยา</Text>
+      {frequency !== 'every_X_hours' && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>💊 วิธีการใช้ยา</Text>
 
         <View style={styles.inputContainer}>
           <Text style={styles.label}>วิธีกินยา</Text>
@@ -597,6 +691,7 @@ const EditMedicationScreen = ({ navigation, route }) => {
             ))}
           </View>
         </View>
+          
 
         {(usageMealID === 2 || usageMealID === 3) && (
           <View style={styles.inputContainer}>
@@ -684,6 +779,7 @@ const EditMedicationScreen = ({ navigation, route }) => {
           </View>
         </View>
       </View>
+      )}
 
       {/* Section: ระยะเวลา */}
       <View style={styles.section}>

@@ -506,6 +506,10 @@ const HomeScreen = ({ navigation, onLogout }) => {
     if (activeFilter === 'ทั้งหมด') {
       return items;
     }
+    // ✅ แก้ไข: ถ้าฟิลเตอร์ "ไม่ระบุ" ให้รวมทั้ง null และ 'ไม่ระบุ'
+    if (activeFilter === 'ไม่ระบุ') {
+      return items.filter(item => item.status === 'ไม่ระบุ' || !item.status);
+    }
     return items.filter(item => item.status === activeFilter);
   };
 
@@ -623,7 +627,7 @@ const HomeScreen = ({ navigation, onLogout }) => {
     setMedTime(new Date());
     setActualTakeTime(item.actualTime ? item.actualTime.slice(0, 5) : new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }));
     // เลือกโหมดตามสถานะ
-    if (item.status === 'รอกิน') {
+    if (item.status === 'รอกิน' || item.status === 'ไม่ระบุ') {
       setModalMode('record');    // โหมดบันทึกครั้งแรก: ทานยาแล้ว/ข้าม/ยกเลิก
     } else {
       setModalMode('detail');    // โหมดดูรายละเอียด: ปิด/แก้ไข
@@ -857,7 +861,9 @@ const HomeScreen = ({ navigation, onLogout }) => {
                   >
                     <Ionicons name="create" size={16} color="#4dabf7" />
                     <Text style={styles.recordButtonText}>
-                      {med.status === 'รอกิน' ? 'บันทึกการกิน' : 'ดูรายละเอียด'} {/* ✅ */}
+                      {med.status === 'รอกิน' || med.status === 'ไม่ระบุ'
+                        ? 'บันทึกการกิน'
+                        : 'ดูรายละเอียด'}
                     </Text>
                   </TouchableOpacity>
                 </View>

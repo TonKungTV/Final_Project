@@ -17,7 +17,6 @@ const frequencyOptions = [
   { label: 'ทุกวัน', value: 'every_day', id: 1 },
   { label: 'ทุก X วัน', value: 'every_X_days', id: 2 },
   { label: 'ทุก X ชั่วโมง', value: 'every_X_hours', id: 3 },
-  { label: 'ทุกๆ X นาที', value: 'every_X_minutes', id: 4 },
   { label: 'วันที่เจาะจงของสัปดาห์', value: 'weekly', id: 5 },
   { label: 'วันที่เจาะจงของเดือน', value: 'monthly', id: 6 },
   { label: 'X วันใช้ X วันหยุดพัก', value: 'cycle', id: 7 },
@@ -55,6 +54,8 @@ const AddMedicationScreen = ({ navigation, route }) => {
   const [selectedTime, setSelectedTime] = useState(null);
   const [customFrequencyTime, setCustomFrequencyTime] = useState('');
   const [CustomValue, setCustomValue] = useState('');
+  const [startTime, setStartTime] = useState(new Date());
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
 
   const [groups, setGroups] = useState([]);
   const [units, setUnits] = useState([]);
@@ -66,10 +67,10 @@ const AddMedicationScreen = ({ navigation, route }) => {
         // ดึง userId จาก AsyncStorage
         const userIdStr = await AsyncStorage.getItem('userId');
         const uid = userIdStr ? parseInt(userIdStr, 10) : null;
-        
+
         if (!uid) {
           Alert.alert('Error', 'กรุณาเข้าสู่ระบบใหม่');
-          navigation.navigate('Login');
+          navigation.navigate('LoginScreen');
           return;
         }
 
@@ -130,14 +131,14 @@ const AddMedicationScreen = ({ navigation, route }) => {
   const fetchUserMealTimes = async (uid) => {
     try {
       const response = await fetch(`${BASE_URL}/api/userdefaultmealtime/${uid}`);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
       console.log('📥 User meal times:', data);
-      
+
       setDefaultTimes(data);
     } catch (error) {
       console.error('❌ Error fetching user meal times:', error);
@@ -213,54 +214,75 @@ const AddMedicationScreen = ({ navigation, route }) => {
   const handleSave = async () => {
     if (!userId) {
       Alert.alert('กรุณาเข้าสู่ระบบก่อนเพิ่มยา');
-      navigation.navigate('Login');
+      navigation.navigate('LoginScreen');
       return;
     }
-    if (!name || !typeID || selectedTimeIds.length === 0 || !groupID) {
-      Alert.alert('กรุณากรอกข้อมูลให้ครบ');
+
+    // ✅ ตรวจสอบข้อมูลพื้นฐาน
+    if (!name || !typeID || !groupID) {
+      Alert.alert('กรุณากรอกข้อมูลให้ครบ', 'ชื่อยา, ประเภทยา และกลุ่มโรคเป็นข้อมูลที่จำเป็น');
       return;
     }
-    
-    if ((usageMealID === 2 || usageMealID === 3) && !prePostTime) {
-      Alert.alert('กรุณาเลือกเวลาก่อน/หลังอาหาร');
-      return;
-    }
-    if ((usageMealID === 2 || usageMealID === 3)) {
-      const needMinutes =
-        prePostTime === null ||
-        prePostTime === undefined ||
-        (prePostTime === 'custom' && (!customTime || isNaN(parseInt(customTime, 10))));
-      if (needMinutes) {
-        Alert.alert('โปรดเลือกจำนวน "นาที" สำหรับก่อน/หลังอาหาร (เช่น 15 หรือ 30 นาที)');
+
+    // ✅ ตรวจสอบความถี่ every_X_hours
+    if (frequency === 'every_X_hours') {
+      if (!CustomValue || isNaN(parseInt(CustomValue, 10))) {
+        Alert.alert('กรุณากรอกจำนวนชั่วโมง', 'โปรดระบุจำนวนชั่วโมงที่ต้องการกินยา');
         return;
       }
+      if (!startTime) {
+        Alert.alert('กรุณาเลือกเวลาที่เริ่มกินยา');
+        return;
+      }
+    }
+    // ✅ ตรวจสอบความถี่อื่นๆ
+    else {
+      // ตรวจสอบว่าต้องเลือกเวลาอาหารหรือไม่
+      if (selectedTimeIds.length === 0) {
+        Alert.alert('กรุณาเลือกเวลาที่กินยา', 'โปรดเลือกมื้อ/เวลาที่กินยาอย่างน้อย 1 มื้อ');
+        return;
+      }
+
+      // ตรวจสอบการใช้ยาก่อน/หลังอาหาร
+      if ((usageMealID === 2 || usageMealID === 3) && !prePostTime) {
+        Alert.alert('กรุณาเลือกเวลาก่อน/หลังอาหาร');
+        return;
+      }
+
+      if ((usageMealID === 2 || usageMealID === 3)) {
+        const needMinutes =
+          prePostTime === null ||
+          prePostTime === undefined ||
+          (prePostTime === 'custom' && (!customTime || isNaN(parseInt(customTime, 10))));
+        if (needMinutes) {
+          Alert.alert('โปรดเลือกจำนวน "นาที" สำหรับก่อน/หลังอาหาร (เช่น 15 หรือ 30 นาที)');
+          return;
+        }
+      }
+    }
+
+    // ✅ ตรวจสอบความถี่แบบกำหนดเอง
+    if (frequency === 'every_X_days' && (!CustomValue || isNaN(parseInt(CustomValue, 10)))) {
+      Alert.alert('โปรดกรอกจำนวนวัน', 'ระบุจำนวนวันสำหรับความถี่แบบกำหนดเอง');
+      return;
     }
 
     if (frequency === 'weekly' && selectedWeekDays.length === 0) {
       Alert.alert('โปรดเลือกวันในสัปดาห์อย่างน้อย 1 วัน');
       return;
     }
+
     if (frequency === 'monthly' && Object.keys(selectedMonthDates).length === 0) {
       Alert.alert('โปรดเลือกวันที่ของเดือนอย่างน้อย 1 วัน');
       return;
     }
-    if ((frequency === 'every_X_days' || frequency === 'every_X_hours' || frequency === 'every_X_minutes') && (!CustomValue || isNaN(parseInt(CustomValue, 10)))) {
-      Alert.alert('โปรดกรอกจำนวนสำหรับความถี่แบบกำหนดเอง');
-      return;
-    }
+
     if (frequency === 'cycle' && (!cycleUseDays || !cycleRestDays || isNaN(parseInt(cycleUseDays, 10)) || isNaN(parseInt(cycleRestDays, 10)))) {
       Alert.alert('โปรดกรอกจำนวนวันสำหรับวงจรการใช้/หยุดพัก');
       return;
     }
 
-    const userIdStr = await AsyncStorage.getItem('userId');
-    const userId = userIdStr ? parseInt(userIdStr, 10) : null;
-    if (!userId) {
-      Alert.alert('กรุณาเข้าสู่ระบบก่อนเพิ่มยา');
-      navigation.navigate('LoginScreen');
-      return;
-    }
-
+    // ✅ สร้างข้อมูลสำหรับส่ง API
     const defaultTimeFields = {};
     selectedTimeIds.forEach((id, index) => {
       defaultTimeFields[`DefaultTime_ID_${index + 1}`] = id;
@@ -270,6 +292,7 @@ const AddMedicationScreen = ({ navigation, route }) => {
     const FrequencyID = selectedFrequency ? selectedFrequency.id : null;
     if (!FrequencyID) {
       console.error('❌ FrequencyID is not defined');
+      Alert.alert('ความถี่ไม่ถูกต้อง', 'กรุณาเลือกความถี่การใช้ยาใหม่');
       return;
     }
 
@@ -297,22 +320,28 @@ const AddMedicationScreen = ({ navigation, route }) => {
     };
 
     const medicationData = {
-      UserID: userId, // ✅ ใช้ userId จาก state
+      UserID: userId,
       Name: name,
       Note: note,
       GroupID: parseInt(groupID, 10),
       TypeID: parseInt(typeID, 10),
       Dosage: dosage ? parseInt(dosage, 10) : null,
       UnitID: unitID ? parseInt(unitID, 10) : null,
-      UsageMealID: usageMealID ?? null,
+      UsageMealID: frequency === 'every_X_hours' ? null : (usageMealID ?? null),
       Priority: priority === 'สูง' ? 2 : 1,
       Frequency: frequency,
-      PrePostTime: prePostMinutes,
+      PrePostTime: frequency === 'every_X_hours' ? null : prePostMinutes,
       StartDate: formatLocalDate(startDate),
       EndDate: formatLocalDate(endDate),
       CustomValue: CustomValue || null,
       FrequencyID,
-      ...defaultTimeFields,
+      // ✅ ถ้าเป็น every_X_hours ให้ส่ง StartTime แทน
+      ...(frequency === 'every_X_hours'
+        ? {
+          StartTime: startTime.toTimeString().slice(0, 8) // HH:MM:SS
+        }
+        : defaultTimeFields
+      ),
       WeekDays: selectedWeekDays.length ? selectedWeekDays : null,
       MonthDays: uniqueMonthDays.length ? uniqueMonthDays : null,
       Cycle_Use_Days: cycleUseDays ? parseInt(cycleUseDays, 10) : null,
@@ -348,16 +377,26 @@ const AddMedicationScreen = ({ navigation, route }) => {
           }).catch(err => console.warn('Log creation failed:', err));
         }
 
-        Alert.alert('เพิ่มยาเรียบร้อย');
-        navigation.replace('HomeScreen');
+        Alert.alert('สำเร็จ', 'เพิ่มยาเรียบร้อยแล้ว', [
+          {
+            text: 'ตรวจสอบ',
+            onPress: () => navigation.replace('HomeScreen')
+          }
+        ]);
       } else {
         const errMsg = await response.text();
         console.log('Error response:', errMsg);
-        Alert.alert('เกิดข้อผิดพลาดในการเพิ่ม');
+
+        try {
+          const errJson = JSON.parse(errMsg);
+          Alert.alert('เกิดข้อผิดพลาด', errJson.error?.message || 'ไม่สามารถเพิ่มยาได้');
+        } catch {
+          Alert.alert('เกิดข้อผิดพลาด', 'ไม่สามารถเพิ่มยาได้\n' + errMsg.substring(0, 100));
+        }
       }
     } catch (error) {
       console.error('ERROR:', error);
-      Alert.alert('เชื่อมต่อ backend ไม่ได้');
+      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้\n' + error.message);
     }
   };
 
@@ -419,7 +458,6 @@ const AddMedicationScreen = ({ navigation, route }) => {
                 const label = extractLabel(g) || `กลุ่ม ${id ?? ''}`;
                 return <Picker.Item key={id ?? JSON.stringify(g)} label={label} value={String(id ?? '')} />;
               })}
-              <Picker.Item label="+ เพิ่มกลุ่มโรคใหม่" value="__add_group__" />
             </Picker>
           </View>
         </View>
@@ -452,7 +490,6 @@ const AddMedicationScreen = ({ navigation, route }) => {
                 const label = extractLabel(t) || `ประเภท ${id ?? ''}`;
                 return <Picker.Item key={id ?? JSON.stringify(t)} label={label} value={String(id ?? '')} />;
               })}
-              <Picker.Item label="+ เพิ่มประเภทใหม่" value="__add_type__" />
             </Picker>
           </View>
         </View>
@@ -496,7 +533,6 @@ const AddMedicationScreen = ({ navigation, route }) => {
                   const label = extractLabel(u) || `หน่วย ${id ?? ''}`;
                   return <Picker.Item key={id ?? JSON.stringify(u)} label={label} value={String(id ?? '')} />;
                 })}
-                <Picker.Item label="+ เพิ่ม" value="__add_unit__" />
               </Picker>
             </View>
           </View>
@@ -544,9 +580,41 @@ const AddMedicationScreen = ({ navigation, route }) => {
               value={CustomValue}
               onChangeText={setCustomValue}
               keyboardType="numeric"
-              placeholder="กรอกจำนวน"
+              placeholder={frequency === 'every_X_hours' ? 'กรอกจำนวนชั่วโมง' : 'กรอกจำนวนวัน'}
               placeholderTextColor="#999"
             />
+          </View>
+        )}
+
+        {/* ✅ แสดง Time Picker สำหรับ every_X_hours */}
+        {frequency === 'every_X_hours' && (
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>เวลาที่เริ่มกิน <Text style={styles.required}>*</Text></Text>
+            <TouchableOpacity
+              style={styles.dateButton}
+              onPress={() => setShowStartTimePicker(true)}
+            >
+              <Text style={styles.dateButtonText}>
+                {startTime.toLocaleTimeString('th-TH', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </Text>
+            </TouchableOpacity>
+
+            {showStartTimePicker && (
+              <DateTimePicker
+                value={startTime}
+                mode="time"
+                is24Hour={true}
+                onChange={(event, selectedTime) => {
+                  setShowStartTimePicker(false);
+                  if (selectedTime) {
+                    setStartTime(selectedTime);
+                  }
+                }}
+              />
+            )}
           </View>
         )}
 
@@ -636,133 +704,136 @@ const AddMedicationScreen = ({ navigation, route }) => {
       </View>
 
       {/* Section: วิธีใช้ยา */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>💊 วิธีการใช้ยา</Text>
+      {/* ✅ ซ่อน Section วิธีใช้ยาเมื่อเลือก every_X_hours */}
+      {frequency !== 'every_X_hours' && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>💊 วิธีการใช้ยา</Text>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>วิธีกินยา</Text>
-          <View style={styles.toggleRow}>
-            {[
-              { label: 'พร้อมอาหาร', id: 1, icon: '🍽️' },
-              { label: 'ก่อนอาหาร', id: 2, icon: '⏰' },
-              { label: 'หลังอาหาร', id: 3, icon: '⏱️' }
-            ].map(opt => (
-              <TouchableOpacity
-                key={opt.id}
-                style={[
-                  styles.usageButton,
-                  usageMealID === opt.id && styles.usageButtonActive
-                ]}
-                onPress={() => {
-                  setUsageMealID(opt.id);
-                  setPrePostTime(null);
-                  setCustomTime('');
-                }}
-              >
-                <Text style={styles.usageIcon}>{opt.icon}</Text>
-                <Text style={[
-                  styles.usageButtonText,
-                  usageMealID === opt.id && styles.usageButtonTextActive
-                ]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {(usageMealID === 2 || usageMealID === 3) && (
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>
-              เวลา{usageMealID === 2 ? 'ก่อน' : 'หลัง'}อาหาร <Text style={styles.required}>*</Text>
-            </Text>
+            <Text style={styles.label}>วิธีกินยา</Text>
             <View style={styles.toggleRow}>
-              {[15, 30].map((min) => (
+              {[
+                { label: 'พร้อมอาหาร', id: 1, icon: '🍽️' },
+                { label: 'ก่อนอาหาร', id: 2, icon: '⏰' },
+                { label: 'หลังอาหาร', id: 3, icon: '⏱️' }
+              ].map(opt => (
                 <TouchableOpacity
-                  key={min}
+                  key={opt.id}
                   style={[
-                    styles.timeOptionButton,
-                    prePostTime === min && styles.timeOptionButtonActive
+                    styles.usageButton,
+                    usageMealID === opt.id && styles.usageButtonActive
                   ]}
-                  onPress={() => { setPrePostTime(min); setCustomTime(''); }}
+                  onPress={() => {
+                    setUsageMealID(opt.id);
+                    setPrePostTime(null);
+                    setCustomTime('');
+                  }}
                 >
+                  <Text style={styles.usageIcon}>{opt.icon}</Text>
                   <Text style={[
-                    styles.timeOptionText,
-                    prePostTime === min && styles.timeOptionTextActive
+                    styles.usageButtonText,
+                    usageMealID === opt.id && styles.usageButtonTextActive
                   ]}>
-                    {min} นาที
+                    {opt.label}
                   </Text>
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity
-                style={[
-                  styles.timeOptionButton,
-                  prePostTime === 'custom' && styles.timeOptionButtonActive
-                ]}
-                onPress={() => setPrePostTime('custom')}
-              >
-                <Text style={[
-                  styles.timeOptionText,
-                  prePostTime === 'custom' && styles.timeOptionTextActive
-                ]}>
-                  กำหนดเอง
-                </Text>
-              </TouchableOpacity>
             </View>
+          </View>
 
-            {prePostTime === 'custom' && (
-              <TextInput
-                placeholder="ระบุเวลา (นาที)"
-                style={[styles.input, { marginTop: 10 }]}
-                keyboardType="numeric"
-                value={customTime}
-                onChangeText={setCustomTime}
-                placeholderTextColor="#999"
-              />
+          {(usageMealID === 2 || usageMealID === 3) && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>
+                เวลา{usageMealID === 2 ? 'ก่อน' : 'หลัง'}อาหาร <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.toggleRow}>
+                {[15, 30].map((min) => (
+                  <TouchableOpacity
+                    key={min}
+                    style={[
+                      styles.timeOptionButton,
+                      prePostTime === min && styles.timeOptionButtonActive
+                    ]}
+                    onPress={() => { setPrePostTime(min); setCustomTime(''); }}
+                  >
+                    <Text style={[
+                      styles.timeOptionText,
+                      prePostTime === min && styles.timeOptionTextActive
+                    ]}>
+                      {min} นาที
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[
+                    styles.timeOptionButton,
+                    prePostTime === 'custom' && styles.timeOptionButtonActive
+                  ]}
+                  onPress={() => setPrePostTime('custom')}
+                >
+                  <Text style={[
+                    styles.timeOptionText,
+                    prePostTime === 'custom' && styles.timeOptionTextActive
+                  ]}>
+                    กำหนดเอง
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {prePostTime === 'custom' && (
+                <TextInput
+                  placeholder="ระบุเวลา (นาที)"
+                  style={[styles.input, { marginTop: 10 }]}
+                  keyboardType="numeric"
+                  value={customTime}
+                  onChangeText={setCustomTime}
+                  placeholderTextColor="#999"
+                />
+              )}
+            </View>
+          )}
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>มื้อ/เวลาที่กินยา <Text style={styles.required}>*</Text></Text>
+            {defaultTimes.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>กำลังโหลดเวลาอาหาร...</Text>
+              </View>
+            ) : (
+              <View style={styles.mealTimesContainer}>
+                {defaultTimes.map(time => (
+                  <TouchableOpacity
+                    key={time.DefaultTime_ID}
+                    onPress={() => toggleTime(time.DefaultTime_ID)}
+                    style={[
+                      styles.mealTimeButton,
+                      selectedTimeIds.includes(time.DefaultTime_ID) && styles.mealTimeButtonActive
+                    ]}
+                  >
+                    <View style={styles.mealTimeContent}>
+                      <Text style={[
+                        styles.mealTimeLabel,
+                        selectedTimeIds.includes(time.DefaultTime_ID) && styles.mealTimeLabelActive
+                      ]}>
+                        {time.MealName || convertMeal(time.MealID)}
+                      </Text>
+                      <Text style={[
+                        styles.mealTimeTime,
+                        selectedTimeIds.includes(time.DefaultTime_ID) && styles.mealTimeTimeActive
+                      ]}>
+                        {time.Time.slice(0, 5)}
+                      </Text>
+                    </View>
+                    {selectedTimeIds.includes(time.DefaultTime_ID) && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
             )}
           </View>
-        )}
-
-        <View style={styles.inputContainer}>
-        <Text style={styles.label}>มื้อ/เวลาที่กินยา <Text style={styles.required}>*</Text></Text>
-        {defaultTimes.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>กำลังโหลดเวลาอาหาร...</Text>
-          </View>
-        ) : (
-          <View style={styles.mealTimesContainer}>
-            {defaultTimes.map(time => (
-              <TouchableOpacity
-                key={time.DefaultTime_ID}
-                onPress={() => toggleTime(time.DefaultTime_ID)}
-                style={[
-                  styles.mealTimeButton,
-                  selectedTimeIds.includes(time.DefaultTime_ID) && styles.mealTimeButtonActive
-                ]}
-              >
-                <View style={styles.mealTimeContent}>
-                  <Text style={[
-                    styles.mealTimeLabel,
-                    selectedTimeIds.includes(time.DefaultTime_ID) && styles.mealTimeLabelActive
-                  ]}>
-                    {time.MealName || convertMeal(time.MealID)}
-                  </Text>
-                  <Text style={[
-                    styles.mealTimeTime,
-                    selectedTimeIds.includes(time.DefaultTime_ID) && styles.mealTimeTimeActive
-                  ]}>
-                    {time.Time.slice(0, 5)}
-                  </Text>
-                </View>
-                {selectedTimeIds.includes(time.DefaultTime_ID) && (
-                  <Text style={styles.checkmark}>✓</Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </View>
-      </View>
+        </View>
+      )}
 
       {/* Section: ระยะเวลา */}
       <View style={styles.section}>
