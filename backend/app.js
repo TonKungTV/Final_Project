@@ -865,8 +865,9 @@ app.get('/api/reminders/today', (req, res) => {
     : new Date().toISOString().split('T')[0];
 
   console.log(`📅 Fetching reminders for user ${userId} on ${dateParam}`);
+  
 
-  // ✅ ฟังก์ชันคำนวณว่าควรมียาในวันนี้หรือไม่
+  //  ฟังก์ชันคำนวณว่าควรมียาในวันนี้หรือไม่
   const shouldHaveMedicationOnDate = (dateStr, frequencyValue, startDateStr, endDateStr, customValue, weekDaysArr, monthDaysArr, cycleUse, cycleRest, onDemand) => {
     if (onDemand) return false;
 
