@@ -1685,14 +1685,25 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
 
     let lateMinutes = null;
     let isLate = 0;
+    let finalTimingNote = 'ไม่ระบุ';
 
-    // คำนวณ Late เฉพาะเมื่อสถานะเป็น "กินแล้ว"
+    // ✅ คำนวณ Late และ TimingNote เฉพาะเมื่อสถานะเป็น "กินแล้ว"
     if (status === 'กินแล้ว' && actualTime && scheduledTime) {
-      lateMinutes = calculateLateMinutes(scheduledTime, actualTime);
-      isLate = lateMinutes > 0 ? 1 : 0;
+      const timingResult = calculateLateMinutes(scheduledTime, actualTime, DEFAULT_TOLERANCE_MINUTES);
+      lateMinutes = timingResult.lateMinutes;
+      isLate = timingResult.isLate;
+      finalTimingNote = timingResult.timingNote;
+
+      console.log('✅ Timing calculation:', {
+        scheduledTime,
+        actualTime,
+        lateMinutes,
+        isLate,
+        timingNote: finalTimingNote
+      });
     }
 
-    // อัปเดต schedule
+    // ✅ อัปเดต schedule พร้อม LateMinutes, IsLate, TimingNote
     await db.promise().query(
       `UPDATE medicationschedule 
        SET Status = ?, 
@@ -1704,7 +1715,7 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
            TimingNote = ?
        WHERE ScheduleID = ?`,
       [status, sideEffects || null, actualTime || null, recordedAt || new Date().toISOString(),
-        lateMinutes, isLate, timingNote, scheduleId]
+        lateMinutes, isLate, finalTimingNote, scheduleId]
     );
 
     // ✅ อัปเดต medicationlog
@@ -1715,6 +1726,7 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
       status,
       lateMinutes,
       isLate,
+      timingNote: finalTimingNote,
       logResult
     });
 
@@ -1725,7 +1737,7 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
       status,
       lateMinutes,
       isLate,
-      timingNote,
+      timingNote: finalTimingNote,
       log: logResult
     });
   } catch (error) {
@@ -2838,19 +2850,50 @@ app.delete('/api/units/:id', (req, res) => {
   });
 });
 
+// ✅ ค่า tolerance สำหรับความช้า (นาที)  ที่ Frontend ใน HomeScreen
+const DEFAULT_TOLERANCE_MINUTES = 5;
+
 // ✅ ฟังก์ชันคำนวณเวลาที่กินช้า
-const calculateLateMinutes = (scheduledTime, actualTime) => {
-  if (!scheduledTime || !actualTime) return null;
+const calculateLateMinutes = (scheduledTime, actualTime, toleranceMinutes = DEFAULT_TOLERANCE_MINUTES) => {
+  if (!scheduledTime || !actualTime) return { lateMinutes: null, isLate: 0, timingNote: 'ไม่ระบุ' };
 
-  const scheduled = new Date(`1970-01-01T${scheduledTime}`);
-  const actual = new Date(`1970-01-01T${actualTime}`);
+  try {
+    const scheduled = new Date(`1970-01-01T${scheduledTime}`);
+    const actual = new Date(`1970-01-01T${actualTime}`);
 
-  if (isNaN(scheduled) || isNaN(actual)) return null;
+    if (isNaN(scheduled) || isNaN(actual)) return { lateMinutes: null, isLate: 0, timingNote: 'ไม่ระบุ' };
 
-  const diffMs = actual - scheduled;
-  const diffMinutes = Math.floor(diffMs / 60000);
+    const diffMs = actual - scheduled;
+    const diffMinutes = Math.floor(diffMs / 60000);
 
-  return diffMinutes > 0 ? diffMinutes : 0; // คืนค่า 0 ถ้ากินก่อนเวลา
+    // ✅ ถ้าภายใน ±tolerance นาที ถือว่าตรงเวลา
+    if (Math.abs(diffMinutes) <= toleranceMinutes) {
+      return {
+        lateMinutes: 0,
+        isLate: 0,
+        timingNote: 'ตรงเวลา'
+      };
+    }
+
+    // ✅ ถ้าเกินกว่า tolerance นาที ถือว่ากินช้า
+    if (diffMinutes > toleranceMinutes) {
+      return {
+        lateMinutes: diffMinutes,
+        isLate: 1,
+        timingNote: 'กินช้า'
+      };
+    }
+
+    // ✅ ถ้าก่อนเวลามากกว่า tolerance ถือว่ากินก่อนเวลา (ไม่บ่อย แต่ต้องรองรับ)
+    return {
+      lateMinutes: 0,
+      isLate: 0,
+      timingNote: 'ตรงเวลา'
+    };
+  } catch (err) {
+    console.error('❌ Error in calculateLateMinutes:', err);
+    return { lateMinutes: null, isLate: 0, timingNote: 'ไม่ระบุ' };
+  }
 };
 
 //  ฟังก์ชัน Auto-update Status เป็น "ไม่ระบุ" สำหรับยาที่เลยเวลา

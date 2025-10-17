@@ -618,6 +618,20 @@ const HomeScreen = ({ navigation, onLogout }) => {
       // เปิด modal กลับมาถ้าเกิดข้อผิดพลาด
       setModalVisible(true);
     }
+
+    const loadUpdatedData = async () => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      const today = formatLocalDate(new Date());
+      const response = await fetch(`${BASE_URL}/api/reminders/today?userId=${userId}&date=${today}`);
+      const data = await response.json();
+      setItems(Array.isArray(data) ? data : []);
+      setAlertedIds(new Set());
+    } catch (error) {
+      console.error('Error reloading data:', error);
+    }
+    await loadUpdatedData();
+  };
   };
 
   const openModal = (item) => {
@@ -713,6 +727,8 @@ const HomeScreen = ({ navigation, onLogout }) => {
       ]
     );
   };
+
+  
 
   return (
     <View style={styles.screenWrapper}>
@@ -886,6 +902,7 @@ const HomeScreen = ({ navigation, onLogout }) => {
               {selectedItem && (
                 <>
                   <View style={styles.modalInfo}>
+                    
                     <Text style={styles.modalMedName}>{selectedItem.name}</Text>
                     <Text style={styles.modalDetail}>เวลาที่กำหนด: {selectedItem.time}</Text>
                     <Text style={styles.modalDetail}>ขนาดยา: {selectedItem.dose}</Text>
@@ -893,6 +910,7 @@ const HomeScreen = ({ navigation, onLogout }) => {
                     <Text style={[styles.modalDetail, { fontWeight: 'bold' }]}>
                       สถานะปัจจุบัน: {selectedItem.status}
                     </Text>
+                    
 
                     {/* aomup05 เพิ่มข้อมูลเวลาจริงและผลข้างเคียงในโหมดดูรายละเอียด */}
                     {selectedItem.status === 'กินแล้ว' && (
