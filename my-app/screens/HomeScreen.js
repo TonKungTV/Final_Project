@@ -160,7 +160,6 @@ const HomeScreen = ({ navigation, onLogout }) => {
   const soundRef = React.useRef(null);
   const [soundReady, setSoundReady] = useState(false);
   const NOTIFY_SOUND = require('../assets/notify.mp3');
-  const [autoRefreshActive, setAutoRefreshActive] = useState(true);
 
   const pushNotification = (med) => {
     const nid = `${med.id}-${Date.now()}`;
@@ -353,8 +352,6 @@ const HomeScreen = ({ navigation, onLogout }) => {
 
     try {
       const dateStr = dateOverride ? dateOverride : formatLocalDate(selectedDate);
-      console.log(`📥 Loading medications for date: ${dateStr}`);
-
       const res = await fetch(`${BASE_URL}/api/reminders/today?userId=${userId}&date=${dateStr}`);
       const data = await res.json();
 
@@ -373,66 +370,12 @@ const HomeScreen = ({ navigation, onLogout }) => {
         status: r.Status || 'รอกิน',
         actualTime: r.ActualTime || null,
       }));
-
-      console.log(`✅ Loaded ${mapped.length} medications`);
       setItems(mapped);
       setNotificationItems(mapped); // ส่งข้อมูลให้ Context
     } catch (error) {
       console.error('Error loading medications:', error);
     }
   };
-
-
-  useEffect(() => {
-    if (!autoRefreshActive) return;
-
-    const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing medications...'); // ✅ Debug
-      load();
-    }, 10000); // ✅ ทุก 10 วินาที
-
-    return () => clearInterval(interval);
-  }, [autoRefreshActive, selectedDate]);
-
-  useEffect(() => {
-    console.log('📅 Date changed, reloading...');
-    load();
-    setAlertedIds(new Set()); // ✅ รีเซ็ต alertedIds เมื่อเปลี่ยนวันที่
-  }, [selectedDate]);
-
-  // ✅ Reload เมื่อ screen focus
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      console.log('👁️ Screen focused, reloading...');
-      load();
-      setAutoRefreshActive(true); // ✅ เปิดการอัพเดทอัตโนมัติ
-    });
-
-    const blurUnsubscribe = navigation.addListener('blur', () => {
-      console.log('👁️ Screen blurred, pausing auto-refresh...');
-      setAutoRefreshActive(false); // ✅ ปิดการอัพเดทอัตโนมัติ
-    });
-
-    return () => {
-      unsubscribe();
-      blurUnsubscribe();
-    };
-  }, [navigation]);
-
-  // ✅ Reload เมื่อ app กลับมา active
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (st) => {
-      if (st === 'active') {
-        console.log('📱 App became active, reloading...');
-        load();
-        setAutoRefreshActive(true);
-      } else if (st === 'background') {
-        console.log('📱 App went to background, pausing auto-refresh...');
-        setAutoRefreshActive(false);
-      }
-    });
-    return () => sub.remove();
-  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -533,6 +476,14 @@ const HomeScreen = ({ navigation, onLogout }) => {
     tryPlay();
   };
 
+  // ให้ reload ทุกครั้งที่ screen ได้ focus
+  useEffect(() => {
+    load();
+    const unsubscribe = navigation.addListener('focus', () => {
+      load();
+    });
+    return unsubscribe;
+  }, []);
 
   const changeSelectedDate = (deltaDays) => {
     const d = new Date(selectedDate);
