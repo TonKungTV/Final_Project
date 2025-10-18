@@ -91,41 +91,41 @@ const MealTimes = ({ navigation }) => {
 
     // ✅ บันทึกเวลาอาหาร
     const handleSave = async () => {
-        if (!userId) {
-            Alert.alert('Error', 'ไม่พบข้อมูลผู้ใช้');
-            return;
-        }
+  try {
+    const userId = await AsyncStorage.getItem('userId');
+    if (!userId) {
+      Alert.alert('ข้อผิดพลาด', 'ไม่สามารถหา User ID');
+      return;
+    }
 
-        setSaving(true);
+    const response = await fetch(
+      `${BASE_URL}/api/meal-times/${userId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          breakfast: mealTimes.breakfast,  // HH:MM format
+          lunch: mealTimes.lunch,
+          dinner: mealTimes.dinner,
+          snack: mealTimes.snack
+        })
+      }
+    );
 
-        try {
-            const response = await fetch(`${BASE_URL}/api/meal-times/${userId}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(mealTimes),
-            });
+    const data = await response.json();
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to save meal times');
-            }
+    if (!response.ok) {
+      throw new Error(data.error || 'ไม่สามารถบันทึกได้');
+    }
 
-            const data = await response.json();
-            console.log('✅ Save response:', data);
-
-            Alert.alert('สำเร็จ', 'บันทึกเวลาอาหารสำเร็จ!', [
-                { text: 'ตรวจสอบ', onPress: () => navigation.goBack() }
-            ]);
-
-        } catch (error) {
-            console.error('❌ Error saving meal times:', error);
-            Alert.alert('Error', 'ไม่สามารถบันทึกเวลาอาหาร\n' + error.message);
-        } finally {
-            setSaving(false);
-        }
-    };
+    Alert.alert('สำเร็จ', 'บันทึกเวลามื้ออาหารแล้ว');
+  } catch (error) {
+    console.error('❌ Error:', error);
+    Alert.alert('ข้อผิดพลาด', error.message);
+  }
+};
 
     const handleCancel = () => {
         navigation.goBack();

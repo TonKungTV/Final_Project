@@ -1,3 +1,4 @@
+//ทำปุ่มเมนูเป็นเมนูบาร์
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -357,23 +358,53 @@ const HomeScreen = ({ navigation, onLogout }) => {
 
       const scheduledOnly = Array.isArray(data) ? data.filter(r => r.ScheduleID) : [];
 
-      const mapped = scheduledOnly.map((r, i) => ({
-        id: r.ScheduleID || `${r.MedicationID}-${i}`,
-        scheduleId: r.ScheduleID || null,
-        medicationId: r.MedicationID,
-        time: `${r.MealName} ${formatHM(r.Time)} น.`,
-        rawTime: r.Time,
-        name: r.name,
-        dose: r.Dosage != null && r.DosageType ? `${r.Dosage} ${r.DosageType}` : '-',
-        medType: r.TypeName || '-',
-        importance: r.PriorityLabel || 'ปกติ',
-        status: r.Status || 'รอกิน',
-        actualTime: r.ActualTime || null,
-      }));
+      console.log('📥 Fetched reminders:', {
+        count: scheduledOnly.length,
+        sample: scheduledOnly[0]
+      });
+
+      const mapped = scheduledOnly.map((r, i) => {
+        // ✅ Clean MealName อย่างเข้มงวด
+        let mealDisplay = 'ไม่ระบุ';
+
+        if (r.MealName !== null && r.MealName !== undefined && r.MealName !== '') {
+          const trimmed = String(r.MealName).trim();
+          if (trimmed.length > 0 && trimmed !== 'null' && trimmed !== 'undefined') {
+            mealDisplay = trimmed;
+          }
+        }
+
+        console.log(`🔍 [${i}] ${r.name}:`, {
+          rawMealName: r.MealName,
+          type: typeof r.MealName,
+          mealDisplay: mealDisplay,
+          time: r.Time
+        });
+
+        return {
+          id: r.ScheduleID || `${r.MedicationID}-${i}`,
+          scheduleId: r.ScheduleID || null,
+          medicationId: r.MedicationID,
+          // ✅ ใช้ mealDisplay ที่ clean แล้ว
+          time: `${mealDisplay} ${formatHM(r.Time)} น.`,
+          rawTime: r.Time,
+          name: r.name,
+          dose: r.Dosage != null && r.DosageType ? `${r.Dosage} ${r.DosageType}` : '-',
+          medType: r.TypeName || '-',
+          importance: r.PriorityLabel || 'ปกติ',
+          status: r.Status || 'รอกิน',
+          actualTime: r.ActualTime || null,
+          lateMinutes: r.LateMinutes || 0,
+          isLate: r.IsLate || 0,
+          sideEffects: r.SideEffects || null,
+        };
+      });
+
+      console.log('✅ Mapped items:', mapped.length);
       setItems(mapped);
-      setNotificationItems(mapped); // ส่งข้อมูลให้ Context
+      setNotificationItems(mapped);
     } catch (error) {
-      console.error('Error loading medications:', error);
+      console.error('❌ Error loading medications:', error);
     }
   };
 
@@ -618,12 +649,26 @@ const HomeScreen = ({ navigation, onLogout }) => {
       // เปิด modal กลับมาถ้าเกิดข้อผิดพลาด
       setModalVisible(true);
     }
+
+    const loadUpdatedData = async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const today = formatLocalDate(new Date());
+        const response = await fetch(`${BASE_URL}/api/reminders/today?userId=${userId}&date=${today}`);
+        const data = await response.json();
+        setItems(Array.isArray(data) ? data : []);
+        setAlertedIds(new Set());
+      } catch (error) {
+        console.error('Error reloading data:', error);
+      }
+      await loadUpdatedData();
+    };
   };
 
   const openModal = (item) => {
     setSelectedItem(item);
     setModalVisible(true);
-    setSideEffects('');
+    setSideEffects(item.sideEffects || '');
     setMedTime(new Date());
     setActualTakeTime(item.actualTime ? item.actualTime.slice(0, 5) : new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }));
     // เลือกโหมดตามสถานะ
@@ -714,9 +759,14 @@ const HomeScreen = ({ navigation, onLogout }) => {
     );
   };
 
+
+
   return (
-    <View style={styles.screenWrapper}>
-      <ScrollView style={styles.container}>
+  <View style={styles.screenWrapper}>
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+    >
         {/* Header */}
         <View style={styles.headerBox}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 }}>
@@ -885,6 +935,7 @@ const HomeScreen = ({ navigation, onLogout }) => {
 
               {selectedItem && (
                 <>
+                  {/* 🔹 กล่องข้อมูลยา */}
                   <View style={styles.modalInfo}>
                     <Text style={styles.modalMedName}>{selectedItem.name}</Text>
                     <Text style={styles.modalDetail}>เวลาที่กำหนด: {selectedItem.time}</Text>
@@ -893,19 +944,71 @@ const HomeScreen = ({ navigation, onLogout }) => {
                     <Text style={[styles.modalDetail, { fontWeight: 'bold' }]}>
                       สถานะปัจจุบัน: {selectedItem.status}
                     </Text>
-
-                    {/* aomup05 เพิ่มข้อมูลเวลาจริงและผลข้างเคียงในโหมดดูรายละเอียด */}
-                    {selectedItem.status === 'กินแล้ว' && (
-                      <View style={styles.detailSection}>
-                        <Text style={[styles.modalDetail, { fontWeight: 'bold', color: '#4dabf7' }]}>
-                          เวลาที่กินจริง: {selectedItem.actualTime ? selectedItem.actualTime.slice(0, 5) : '-'}
-                        </Text>
-                        <Text style={[styles.modalDetail, { color: '#333' }]}>
-                          ผลข้างเคียง: {selectedItem.sideEffects ? selectedItem.sideEffects : 'ไม่มีข้อมูล'}
-                        </Text>
-                      </View>
-                    )}
                   </View>
+
+                  {/* 🔹 กล่องข้อมูลการบันทึก — ย้ายออกมาอยู่นอก modalInfo */}
+                  {selectedItem.status === 'กินแล้ว' && modalMode !== 'edit' && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>ข้อมูลการบันทึก</Text>
+
+                      <View style={styles.detailRow}>
+                        <Ionicons name="time" size={16} color="#4dabf7" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.detailLabel}>เวลาที่กำหนด</Text>
+                          <Text style={styles.detailValue}>{selectedItem.time}</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Ionicons name="checkmark-circle" size={16} color="#28a745" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.detailLabel}>เวลาที่กินจริง</Text>
+                          <Text style={styles.detailValue}>
+                            {selectedItem.actualTime ? selectedItem.actualTime.slice(0, 5) : '-'} น.
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* เวลาล่าช้า */}
+                      {selectedItem.actualTime && (() => {
+                        const [h1, m1] = (selectedItem.time.match(/\d{2}:\d{2}/) || ['00:00'])[0].split(':').map(Number);
+                        const [h2, m2] = selectedItem.actualTime.split(':').map(Number);
+                        const diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+                        if (diff > 0) {
+                          return (
+                            <View style={styles.detailRow}>
+                              <Ionicons name="warning" size={16} color="#ffc107" />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.detailLabel}>ล่าช้า</Text>
+                                <Text style={styles.detailValue}>{diff} นาที</Text>
+                              </View>
+                            </View>
+                          );
+                        }
+                        return null;
+                      })()}
+
+                      {/* ผลข้างเคียง */}
+                      <View style={styles.detailRow}>
+                        <Ionicons
+                          name={selectedItem.sideEffects ? "warning" : "checkmark-circle"}
+                          size={16}
+                          color={selectedItem.sideEffects ? "#ffc107" : "#28a745"}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.detailLabel}>ผลข้างเคียง</Text>
+                          <Text
+                            style={[
+                              styles.detailValue,
+                              { color: selectedItem.sideEffects ? '#d9534f' : '#28a745' },
+                            ]}
+                          >
+                            {selectedItem.sideEffects || 'ไม่มี'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
 
                   {/* ✅ แสดงส่วนกรอกข้อมูลเฉพาะโหมด 'record' และ 'edit' */}
                   {(modalMode === 'record' || modalMode === 'edit') && (
@@ -1036,68 +1139,64 @@ const HomeScreen = ({ navigation, onLogout }) => {
         )}
 
         {/* เมนูด้านล่าง */}
-        <View style={styles.menu}>
-          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('MedicationListScreen')}>
-            <View style={styles.menuItemLeft}>
-              <Ionicons name="medical" size={20} color="#fff" />
-              <Text style={styles.menuText}>รายการยา</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
+        </ScrollView>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Calendar')}>
-            <View style={styles.menuItemLeft}>
-              <Ionicons name="calendar" size={20} color="#fff" />
-              <Text style={styles.menuText}>ปฏิทิน</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
+      {/* ✅ เมนูแบบ Fixed ด้านล่าง */}
+      <View style={styles.fixedBottomMenu}>
+        <TouchableOpacity 
+          style={styles.bottomMenuItem}
+          onPress={() => navigation.navigate('MedicationListScreen')}
+        >
+          <Ionicons name="medical" size={24} color="#fff" />
+          <Text style={styles.bottomMenuText}>รายการยา</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('History')}>
-            <View style={styles.menuItemLeft}>
-              <Ionicons name="stats-chart" size={20} color="#fff" />
-              <Text style={styles.menuText}>สรุปประวัติการกินยา</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.bottomMenuItem}
+          onPress={() => navigation.navigate('Calendar')}
+        >
+          <Ionicons name="calendar" size={24} color="#fff" />
+          <Text style={styles.bottomMenuText}>ปฏิทิน</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('SettingsScreen')}>
-            <View style={styles.menuItemLeft}>
-              <Ionicons name="settings" size={20} color="#fff" />
-              <Text style={styles.menuText}>การตั้งค่า</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.bottomMenuItem}
+          onPress={() => navigation.navigate('History')}
+        >
+          <Ionicons name="stats-chart" size={24} color="#fff" />
+          <Text style={styles.bottomMenuText}>ประวัติ</Text>
+        </TouchableOpacity>
 
-          {/* ✅ ปุ่มออกจากระบบ */}
-          <TouchableOpacity
-            style={[styles.menuItem, styles.logoutButton]}
-            onPress={handleLogout}
-          >
-            <View style={styles.menuItemLeft}>
-              <Ionicons name="log-out" size={20} color="#fff" />
-              <Text style={styles.menuText}>ออกจากระบบ</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        <TouchableOpacity 
+          style={styles.bottomMenuItem}
+          onPress={() => navigation.navigate('SettingsScreen')}
+        >
+          <Ionicons name="settings" size={24} color="#fff" />
+          <Text style={styles.bottomMenuText}>ตั้งค่า</Text>
+        </TouchableOpacity>
+
+        {/* <TouchableOpacity 
+          style={styles.bottomMenuItem}
+          onPress={handleLogout}
+        >
+          <Ionicons name="log-out" size={24} color="#ff4757" />
+          <Text style={[styles.bottomMenuText, { color: '#ff4757' }]}>ออก</Text>
+        </TouchableOpacity> */}
+      </View>
     </View>
-
   );
 
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-    padding: 15,
-  },
-  scrollContent: {
-    padding: 15,
-    paddingBottom: 40, // เพิ่ม padding ด้านล่างเพื่อให้เลื่อนดูได้สบาย
-  },
+  flex: 1,
+  backgroundColor: '#f8f9fa',
+},
+scrollContent: {
+  padding: 15,
+  paddingBottom: 100, // ✅ เพิ่มเป็น 100  padding ด้านล่างเพื่อให้เลื่อนดูได้สบาย
+},
   headerBox: {
     backgroundColor: '#4dabf7',
     borderRadius: 16,
@@ -1587,7 +1686,38 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 20, // ✅ เพิ่ม margin ด้านล่าง
   },
+// ปุ่มเมนูบาร์ Fixed Bottom Navigation
+fixedBottomMenu: {
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  flexDirection: 'row',
+  backgroundColor: '#4dabf7',
+  paddingVertical: 8,
+  paddingHorizontal: 4,
+  // borderTopWidth: 1,
+  // borderTopColor: '#34495e',
+  elevation: 10,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: -3 },
+  shadowOpacity: 0.2,
+  shadowRadius: 5,
+},
 
+bottomMenuItem: {
+  flex: 1,
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 8,
+},
+
+bottomMenuText: {
+  fontSize: 11,
+  color: '#fff',
+  marginTop: 4,
+  fontWeight: '500',
+},
   menuItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1601,10 +1731,10 @@ const styles = StyleSheet.create({
   },
 
   // ✅ สไตล์สำหรับปุ่มออกจากระบบ (สีแดง)
-  logoutButton: {
-    backgroundColor: '#dc3545', // สีแดง
-    marginTop: 10, // เว้นระยะจากปุ่มอื่น
-  },
+  // logoutButton: {
+  //   backgroundColor: '#dc3545', // สีแดง
+  //   marginTop: 10, // เว้นระยะจากปุ่มอื่น
+  // },
 
   menuItemLeft: {
     flexDirection: 'row',
@@ -1682,10 +1812,33 @@ const styles = StyleSheet.create({
   // aomup05 ใช้สำหรับกล่องแสดงเวลาจริง + ผลข้างเคียง
   detailSection: {
     backgroundColor: '#e7f5ff',
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 10,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
   },
+  detailSectionTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4dabf7',
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 8,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+  },
+
   // aomup05 ข้อความเตือนสีแดงใน Modal เวลาบันทึกย้อนหลัง
   backdateWarning: {
     color: '#dc3545',

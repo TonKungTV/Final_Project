@@ -39,11 +39,11 @@ const MedicationCard = ({ item, onPress, onToggleActive }) => {
   };
 
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={[
         styles.medicationCard,
         !item.IsActive && styles.medicationCardInactive // ✅ สไตล์เมื่อไม่ active
-      ]} 
+      ]}
       onPress={onPress}
     >
       <View style={[styles.medicationIcon, { backgroundColor: getCardColor(item.GroupName, item.Name) }]}>
@@ -51,7 +51,7 @@ const MedicationCard = ({ item, onPress, onToggleActive }) => {
           {getInitials(item.Name).toUpperCase()}
         </Text>
       </View>
-      
+
       <View style={styles.medicationInfo}>
         <Text style={[
           styles.medicationName,
@@ -63,13 +63,13 @@ const MedicationCard = ({ item, onPress, onToggleActive }) => {
           {item.Note ? `${item.Note.substring(0, 30)}${item.Note.length > 30 ? '...' : ''}` : 'ไม่มีหมายเหตุ'}
         </Text>
         <Text style={styles.medicationGroup}>กลุ่มโรค: {item.GroupName || 'ไม่ระบุ'}</Text>
-        
+
         {/* ✅ แสดงสถานะ */}
         <View style={styles.statusBadge}>
-          <Ionicons 
-            name={item.IsActive ? "notifications" : "notifications-off"} 
-            size={14} 
-            color={item.IsActive ? "#28a745" : "#dc3545"} 
+          <Ionicons
+            name={item.IsActive ? "notifications" : "notifications-off"}
+            size={14}
+            color={item.IsActive ? "#28a745" : "#dc3545"}
           />
           <Text style={[
             styles.statusText,
@@ -108,7 +108,7 @@ const MedicationListScreen = ({ navigation }) => {
   const [medications, setMedications] = useState([]);
   const [isLoading, setLoading] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState('ทั้งหมด');
-  
+
   //  สร้างรายการกลุ่มโรค
   const groupNames = ['ทั้งหมด', ...new Set(
     Array.isArray(medications) ? medications.map(item => item.GroupName).filter(Boolean) : []
@@ -116,7 +116,7 @@ const MedicationListScreen = ({ navigation }) => {
 
   useEffect(() => {
     fetchMedications();
-    
+
     // ✅ Reload เมื่อกลับมาหน้านี้
     const unsubscribe = navigation.addListener('focus', fetchMedications);
     return unsubscribe;
@@ -151,7 +151,7 @@ const MedicationListScreen = ({ navigation }) => {
   const handleToggleActive = async (medicationId, isActive) => {
     try {
       console.log('🔄 Toggling active:', { medicationId, isActive });
-      
+
       const response = await fetch(`${BASE_URL}/api/medications/${medicationId}/toggle-active`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -159,19 +159,19 @@ const MedicationListScreen = ({ navigation }) => {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
         console.log('✅ Toggle success:', data);
-        
+
         // อัพเดต state
-        setMedications(prev => 
-          prev.map(med => 
-            med.MedicationID === medicationId 
-              ? { ...med, IsActive: isActive } 
+        setMedications(prev =>
+          prev.map(med =>
+            med.MedicationID === medicationId
+              ? { ...med, IsActive: isActive }
               : med
           )
         );
-        
+
         // แสดง Alert
         Alert.alert(
           'สำเร็จ',
@@ -225,10 +225,10 @@ const MedicationListScreen = ({ navigation }) => {
               data={filteredMedications}
               keyExtractor={(item, index) => item.MedicationID?.toString() ?? index.toString()}
               renderItem={({ item }) => (
-                <MedicationCard
+                <MedicationCard 
                   item={item}
                   onPress={() => navigation.navigate('MedicationDetailScreen', { id: item.MedicationID })}
-                  onToggleActive={handleToggleActive} // ✅ ส่ง callback
+                  onToggleActive={handleToggleActive}
                 />
               )}
               showsVerticalScrollIndicator={false}

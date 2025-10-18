@@ -99,25 +99,40 @@ const CalendarScreen = ({ navigation }) => {
 
     const updateSelectedDayMeds = (dateStr, data = medicationsData) => {
         const dayData = data[dateStr] || [];
-        const mapped = dayData.map((r, i) => ({
-            id: r.ScheduleID || `${r.MedicationID}-${i}`,
-            scheduleId: r.ScheduleID || null,
-            medicationId: r.MedicationID,
-            time: r.Time ? r.Time.slice(0, 5) : '',
-            rawTime: r.Time,
-            name: r.name,
-            dose: r.Dosage != null && r.DosageType ? `${r.Dosage} ${r.DosageType}` : '-',
-            status: r.Status && r.Status.trim() !== '' ? r.Status : 'ไม่ระบุ',
-            mealName: r.MealName || '',
-            medType: r.TypeName || '-',
-            importance: r.PriorityLabel || 'ปกติ',
-            actualTime: r.ActualTime || null,
-            sideEffects: r.SideEffects || null,
-            lateMinutes: r.LateMinutes || 0,
-            isLate: r.IsLate || 0,
-        }));
-        setSelectedDayMeds(mapped);
+  
+  const mapped = dayData.map((r, i) => {
+    // ✅ Clean MealName อย่างเข้มงวด
+    let mealDisplay = 'ไม่ระบุ';
+    
+    if (r.MealName !== null && r.MealName !== undefined && r.MealName !== '') {
+      const trimmed = String(r.MealName).trim();
+      if (trimmed.length > 0 && trimmed !== 'null' && trimmed !== 'undefined') {
+        mealDisplay = trimmed;
+      }
+    }
+
+    return {
+      id: r.ScheduleID || `${r.MedicationID}-${i}`,
+      scheduleId: r.ScheduleID || null,
+      medicationId: r.MedicationID,
+      time: r.Time ? r.Time.slice(0, 5) : '',
+      rawTime: r.Time,
+      name: r.name,
+      dose: r.Dosage != null && r.DosageType ? `${r.Dosage} ${r.DosageType}` : '-',
+      status: r.Status && r.Status.trim() !== '' ? r.Status : 'ไม่ระบุ',
+      // ✅ ใช้ mealDisplay ที่ clean แล้ว
+      mealName: mealDisplay,
+      medType: r.TypeName || '-',
+      importance: r.PriorityLabel || 'ปกติ',
+      actualTime: r.ActualTime || null,
+      sideEffects: r.SideEffects || null,
+      lateMinutes: r.LateMinutes || 0,
+      isLate: r.IsLate || 0,
     };
+    });
+
+  setSelectedDayMeds(mapped);
+};
 
     useEffect(() => {
         loadMedicationsForMonth();
@@ -840,23 +855,38 @@ const CalendarScreen = ({ navigation }) => {
                                     </>
                                 )}
 
-                                {(modalMode === 'record' && (selectedMed.status === 'รอกิน' || selectedMed.status === 'ไม่ระบุ')) && (
+                                {modalMode === 'record' && (
                                     <View style={styles.modalActions}>
+                                        {/* ✅ ปุ่มยกเลิก (ใหม่) */}
                                         <TouchableOpacity
-                                            style={[styles.actionButton, styles.skipButton]}
-                                            onPress={() => updateMedicationStatus('ข้าม')}
+                                            style={[styles.actionButton, styles.cancelButton]}
+                                            onPress={closeMedModal}
                                         >
-                                            <Ionicons name="close-circle" size={20} color="#fff" />
-                                            <Text style={styles.actionButtonText}>ข้ามยา</Text>
+                                            <Ionicons name="close" size={20} color="#fff" />
+                                            <Text style={styles.actionButtonText}>ยกเลิก</Text>
                                         </TouchableOpacity>
 
-                                        <TouchableOpacity
-                                            style={[styles.actionButton, styles.confirmButton]}
-                                            onPress={() => updateMedicationStatus('กินแล้ว')}
-                                        >
-                                            <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                                            <Text style={styles.actionButtonText}>ทานยาแล้ว</Text>
-                                        </TouchableOpacity>
+                                        {/* ✅ ปุ่มข้ามยา */}
+                                        {(selectedMed?.status === 'รอกิน' || selectedMed?.status === 'ไม่ระบุ') && (
+                                            <>
+                                                <TouchableOpacity
+                                                    style={[styles.actionButton, styles.skipButton]}
+                                                    onPress={() => updateMedicationStatus('ข้าม')}
+                                                >
+                                                    <Ionicons name="close-circle" size={20} color="#fff" />
+                                                    <Text style={styles.actionButtonText}>ข้ามยา</Text>
+                                                </TouchableOpacity>
+
+                                                {/* ✅ ปุ่มทานยาแล้ว */}
+                                                <TouchableOpacity
+                                                    style={[styles.actionButton, styles.confirmButton]}
+                                                    onPress={() => updateMedicationStatus('กินแล้ว')}
+                                                >
+                                                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                                                    <Text style={styles.actionButtonText}>ทานยาแล้ว</Text>
+                                                </TouchableOpacity>
+                                            </>
+                                        )}
                                     </View>
                                 )}
 
@@ -888,13 +918,6 @@ const CalendarScreen = ({ navigation }) => {
                                         </TouchableOpacity>
                                     </View>
                                 )}
-
-                                <TouchableOpacity
-                                    style={styles.cancelButton}
-                                    onPress={closeMedModal}
-                                >
-                                    {/* <Text style={styles.cancelButtonText}>ยกเลิก</Text> */}
-                                </TouchableOpacity>
                             </ScrollView>
                         )}
                     </View>
@@ -1488,23 +1511,37 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         gap: 6,
     },
-    skipButton: {
+    cancelButton: {
+  backgroundColor: '#6c757d',
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderRadius: 12,
+  paddingVertical: 14,
+  marginHorizontal: 4,
+},
+    skipButton:
+    {
         backgroundColor: '#dc3545',
     },
-    confirmButton: {
+    confirmButton:
+    {
         backgroundColor: '#28a745',
     },
-    actionButtonText: {
+    actionButtonText:
+    {
         color: '#fff',
         fontSize: 15,
         fontWeight: 'bold',
     },
-    modalButtonRow: {
+    modalButtonRow:
+    {
         flexDirection: 'row',
         gap: 12,
         marginBottom: 12,
     },
-    cancelBtn: {
+    cancelBtn:
+    {
         flex: 1,
         backgroundColor: '#6c757d',
         paddingVertical: 12,
@@ -1514,7 +1551,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 6,
     },
-    confirmBtn: {
+    confirmBtn:
+    {
         flex: 1,
         backgroundColor: '#4dabf7',
         paddingVertical: 12,
@@ -1524,24 +1562,29 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 6,
     },
-    cancelText: {
+    cancelText:
+    {
         color: '#fff',
         fontWeight: '600',
     },
-    confirmText: {
+    confirmText:
+    {
         color: '#fff',
         fontWeight: '600',
     },
-    cancelButton: {
-        paddingVertical: 12,
-        alignItems: 'center',
-    },
-    cancelButtonText: {
+    // cancelButton:
+    // {
+    //     paddingVertical: 12,
+    //     alignItems: 'center',
+    // },
+    cancelButtonText:
+    {
         color: '#666',
         fontSize: 15,
         fontWeight: '500',
     },
-    detailLabel: {
+    detailLabel:
+    {
         fontSize: 12,
         color: '#999',
         marginBottom: 2,
