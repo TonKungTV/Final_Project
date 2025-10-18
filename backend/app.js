@@ -199,6 +199,155 @@ app.get('/api/users', (req, res) => {
   });
 });
 
+
+// /api/user/:id  ลบบัญชีผู้ใช้
+app.delete('/api/user/:id', (req, res) => {
+  const userId = req.params.id;
+  const { password } = req.body;
+
+  if (!userId || !password) {
+    return res.status(400).json({ 
+      error: 'User ID and password are required' 
+    });
+  }
+
+  try {
+    // ✅ ตรวจสอบรหัสผ่าน
+    db.query(
+      'SELECT Password FROM users WHERE UserID = ?',
+      [userId],
+      async (err, userResult) => {
+        if (err) {
+          console.error('❌ Error fetching user:', err);
+          return res.status(500).json({ error: 'Database error', details: err.message });
+        }
+
+        if (userResult.length === 0) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        const user = userResult[0];
+        const isPasswordValid = await bcrypt.compare(password, user.Password);
+
+        if (!isPasswordValid) {
+          return res.status(401).json({ error: 'Invalid password' });
+        }
+
+        console.log(`🗑️ Starting account deletion for UserID: ${userId}`);
+
+        // ✅ ลบตามลำดับ
+        const deleteStep1 = () => {
+          db.query(
+            `DELETE FROM medicationschedule 
+             WHERE MedicationID IN (SELECT MedicationID FROM medication WHERE UserID = ?)`,
+            [userId],
+            (err) => {
+              if (err) {
+                console.error('❌ Error deleting schedules:', err);
+                return res.status(500).json({ error: 'Failed to delete schedules' });
+              }
+              console.log(`✅ Deleted medication schedules`);
+              deleteStep2();
+            }
+          );
+        };
+
+        const deleteStep2 = () => {
+          db.query(
+            `DELETE FROM medication_defaulttime 
+             WHERE medicationid IN (SELECT MedicationID FROM medication WHERE UserID = ?)`,
+            [userId],
+            (err) => {
+              if (err) {
+                console.error('❌ Error deleting default times:', err);
+                return res.status(500).json({ error: 'Failed to delete default times' });
+              }
+              console.log(`✅ Deleted medication default times`);
+              deleteStep3();
+            }
+          );
+        };
+
+        const deleteStep3 = () => {
+          db.query(
+            `DELETE FROM medicationlog 
+             WHERE MedicationID IN (SELECT MedicationID FROM medication WHERE UserID = ?)`,
+            [userId],
+            (err) => {
+              if (err) {
+                console.error('❌ Error deleting logs:', err);
+                return res.status(500).json({ error: 'Failed to delete logs' });
+              }
+              console.log(`✅ Deleted medication logs`);
+              deleteStep4();
+            }
+          );
+        };
+
+        const deleteStep4 = () => {
+          db.query(
+            'DELETE FROM medication WHERE UserID = ?',
+            [userId],
+            (err) => {
+              if (err) {
+                console.error('❌ Error deleting medications:', err);
+                return res.status(500).json({ error: 'Failed to delete medications' });
+              }
+              console.log(`✅ Deleted medications`);
+              deleteStep5();
+            }
+          );
+        };
+
+        const deleteStep5 = () => {
+          db.query(
+            'DELETE FROM userdefaultmealtime WHERE UserID = ?',
+            [userId],
+            (err) => {
+              if (err) {
+                console.error('❌ Error deleting meal times:', err);
+                return res.status(500).json({ error: 'Failed to delete meal times' });
+              }
+              console.log(`✅ Deleted user meal times`);
+              deleteStep6();
+            }
+          );
+        };
+
+        const deleteStep6 = () => {
+          db.query(
+            'DELETE FROM users WHERE UserID = ?',
+            [userId],
+            (err) => {
+              if (err) {
+                console.error('❌ Error deleting user:', err);
+                return res.status(500).json({ error: 'Failed to delete user' });
+              }
+              console.log(`✅ Deleted user account`);
+              
+              res.json({
+                success: true,
+                message: 'Account deleted successfully'
+              });
+            }
+          );
+        };
+
+        // เริ่มลบตั้งแต่ step 1
+        deleteStep1();
+      }
+    );
+
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      error: 'Failed to delete account',
+      details: error.message
+    });
+  }
+});
+
+
 // /api/medications
 app.post('/api/medications', (req, res) => {
   const data = req.body;

@@ -357,23 +357,53 @@ const HomeScreen = ({ navigation, onLogout }) => {
 
       const scheduledOnly = Array.isArray(data) ? data.filter(r => r.ScheduleID) : [];
 
-      const mapped = scheduledOnly.map((r, i) => ({
-        id: r.ScheduleID || `${r.MedicationID}-${i}`,
-        scheduleId: r.ScheduleID || null,
-        medicationId: r.MedicationID,
-        time: `${r.MealName} ${formatHM(r.Time)} น.`,
-        rawTime: r.Time,
-        name: r.name,
-        dose: r.Dosage != null && r.DosageType ? `${r.Dosage} ${r.DosageType}` : '-',
-        medType: r.TypeName || '-',
-        importance: r.PriorityLabel || 'ปกติ',
-        status: r.Status || 'รอกิน',
-        actualTime: r.ActualTime || null,
-      }));
+      console.log('📥 Fetched reminders:', {
+        count: scheduledOnly.length,
+        sample: scheduledOnly[0]
+      });
+
+      const mapped = scheduledOnly.map((r, i) => {
+        // ✅ Clean MealName อย่างเข้มงวด
+        let mealDisplay = 'ไม่ระบุ';
+
+        if (r.MealName !== null && r.MealName !== undefined && r.MealName !== '') {
+          const trimmed = String(r.MealName).trim();
+          if (trimmed.length > 0 && trimmed !== 'null' && trimmed !== 'undefined') {
+            mealDisplay = trimmed;
+          }
+        }
+
+        console.log(`🔍 [${i}] ${r.name}:`, {
+          rawMealName: r.MealName,
+          type: typeof r.MealName,
+          mealDisplay: mealDisplay,
+          time: r.Time
+        });
+
+        return {
+          id: r.ScheduleID || `${r.MedicationID}-${i}`,
+          scheduleId: r.ScheduleID || null,
+          medicationId: r.MedicationID,
+          // ✅ ใช้ mealDisplay ที่ clean แล้ว
+          time: `${mealDisplay} ${formatHM(r.Time)} น.`,
+          rawTime: r.Time,
+          name: r.name,
+          dose: r.Dosage != null && r.DosageType ? `${r.Dosage} ${r.DosageType}` : '-',
+          medType: r.TypeName || '-',
+          importance: r.PriorityLabel || 'ปกติ',
+          status: r.Status || 'รอกิน',
+          actualTime: r.ActualTime || null,
+          lateMinutes: r.LateMinutes || 0,
+          isLate: r.IsLate || 0,
+          sideEffects: r.SideEffects || null,
+        };
+      });
+
+      console.log('✅ Mapped items:', mapped.length);
       setItems(mapped);
-      setNotificationItems(mapped); // ส่งข้อมูลให้ Context
+      setNotificationItems(mapped);
     } catch (error) {
-      console.error('Error loading medications:', error);
+      console.error('❌ Error loading medications:', error);
     }
   };
 
@@ -620,18 +650,18 @@ const HomeScreen = ({ navigation, onLogout }) => {
     }
 
     const loadUpdatedData = async () => {
-    try {
-      const userId = await AsyncStorage.getItem('userId');
-      const today = formatLocalDate(new Date());
-      const response = await fetch(`${BASE_URL}/api/reminders/today?userId=${userId}&date=${today}`);
-      const data = await response.json();
-      setItems(Array.isArray(data) ? data : []);
-      setAlertedIds(new Set());
-    } catch (error) {
-      console.error('Error reloading data:', error);
-    }
-    await loadUpdatedData();
-  };
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        const today = formatLocalDate(new Date());
+        const response = await fetch(`${BASE_URL}/api/reminders/today?userId=${userId}&date=${today}`);
+        const data = await response.json();
+        setItems(Array.isArray(data) ? data : []);
+        setAlertedIds(new Set());
+      } catch (error) {
+        console.error('Error reloading data:', error);
+      }
+      await loadUpdatedData();
+    };
   };
 
   const openModal = (item) => {
@@ -728,7 +758,7 @@ const HomeScreen = ({ navigation, onLogout }) => {
     );
   };
 
-  
+
 
   return (
     <View style={styles.screenWrapper}>
@@ -902,7 +932,7 @@ const HomeScreen = ({ navigation, onLogout }) => {
               {selectedItem && (
                 <>
                   <View style={styles.modalInfo}>
-                    
+
                     <Text style={styles.modalMedName}>{selectedItem.name}</Text>
                     <Text style={styles.modalDetail}>เวลาที่กำหนด: {selectedItem.time}</Text>
                     <Text style={styles.modalDetail}>ขนาดยา: {selectedItem.dose}</Text>
@@ -910,7 +940,7 @@ const HomeScreen = ({ navigation, onLogout }) => {
                     <Text style={[styles.modalDetail, { fontWeight: 'bold' }]}>
                       สถานะปัจจุบัน: {selectedItem.status}
                     </Text>
-                    
+
 
                     {/* aomup05 เพิ่มข้อมูลเวลาจริงและผลข้างเคียงในโหมดดูรายละเอียด */}
                     {selectedItem.status === 'กินแล้ว' && (

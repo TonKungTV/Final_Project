@@ -76,8 +76,9 @@ const HistoryScreen = () => {
   const [medStats, setMedStats] = useState([]);
   const [viewMode, setViewMode] = useState('summary');
   const [displayMode, setDisplayMode] = useState('count');
-  const [lateThreshold, setLateThreshold] = useState('1');
-  const [tempThreshold, setTempThreshold] = useState('1');
+  const [lateThreshold, setLateThreshold] = useState('0.083');
+  const [tempThreshold, setTempThreshold] = useState('5');
+  const [thresholdUnit, setThresholdUnit] = useState('minutes');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('date'); // 'date' | 'name' | 'status'
@@ -94,6 +95,8 @@ const HistoryScreen = () => {
   const [medTimeStats, setMedTimeStats] = useState({});
   const [selectedMedicationId, setSelectedMedicationId] = useState(null);
   const [chartType, setChartType] = useState('bar'); // 'bar' | 'pie'
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
 
 
   // ฟังก์ชันกรองรายการตามยาที่เลือก
@@ -287,6 +290,22 @@ const HistoryScreen = () => {
   const onRefresh = () => {
     setRefreshing(true);
     fetchData(formatLocalDate(fromDate), formatLocalDate(toDate));
+  };
+
+  // ✅ ฟังก์ชันแปลงนาที/ชั่วโมง เป็นชั่วโมง (สำหรับ API)
+  const convertToHours = (value, unit) => {
+    if (unit === 'minutes') {
+      return (parseFloat(value) / 60).toString();
+    }
+    return value;
+  };
+
+  // ✅ ฟังก์ชันแปลงชั่วโมง เป็นนาที (สำหรับแสดง)
+  const convertToDisplayFormat = (hours, unit) => {
+    if (unit === 'minutes') {
+      return (parseFloat(hours) * 60).toString();
+    }
+    return hours;
   };
 
   // ===================================
@@ -959,7 +978,7 @@ const HistoryScreen = () => {
     </ScrollView>
   );
 
-  // ...existing code...
+
   return (
     <View style={styles.container}>
       {/* ===== Header ===== */}
@@ -1016,33 +1035,34 @@ const HistoryScreen = () => {
         </ScrollView>
       </LinearGradient>
 
-      {/* ===== View Mode Tabs ===== */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, viewMode === 'summary' && styles.tabActive]}
-          onPress={() => setViewMode('summary')}
-        >
-          <Ionicons name="stats-chart" size={20} color={viewMode === 'summary' ? '#4facfe' : '#999'} />
-          <Text style={[styles.tabText, viewMode === 'summary' && styles.tabTextActive]}>สรุป</Text>
-        </TouchableOpacity>
+      {/* ===== View Mode Tabs - ซ่อนเมื่อเลือกยาใน details view ===== */}
+      {!(viewMode === 'details' && selectedMedicationId) && (
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, viewMode === 'summary' && styles.tabActive]}
+            onPress={() => setViewMode('summary')}
+          >
+            <Ionicons name="stats-chart" size={20} color={viewMode === 'summary' ? '#4facfe' : '#999'} />
+            <Text style={[styles.tabText, viewMode === 'summary' && styles.tabTextActive]}>สรุป</Text>
+          </TouchableOpacity>
 
+          <TouchableOpacity
+            style={[styles.tab, viewMode === 'byMedication' && styles.tabActive]}
+            onPress={() => setViewMode('byMedication')}
+          >
+            <Ionicons name="medical" size={20} color={viewMode === 'byMedication' ? '#4facfe' : '#999'} />
+            <Text style={[styles.tabText, viewMode === 'byMedication' && styles.tabTextActive]}>แยกตามยา</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tab, viewMode === 'byMedication' && styles.tabActive]}
-          onPress={() => setViewMode('byMedication')}
-        >
-          <Ionicons name="medical" size={20} color={viewMode === 'byMedication' ? '#4facfe' : '#999'} />
-          <Text style={[styles.tabText, viewMode === 'byMedication' && styles.tabTextActive]}>แยกตามยา</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, viewMode === 'details' && styles.tabActive]}
-          onPress={() => setViewMode('details')}
-        >
-          <Ionicons name="list" size={20} color={viewMode === 'details' ? '#4facfe' : '#999'} />
-          <Text style={[styles.tabText, viewMode === 'details' && styles.tabTextActive]}>รายละเอียด</Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[styles.tab, viewMode === 'details' && styles.tabActive]}
+            onPress={() => setViewMode('details')}
+          >
+            <Ionicons name="list" size={20} color={viewMode === 'details' ? '#4facfe' : '#999'} />
+            <Text style={[styles.tabText, viewMode === 'details' && styles.tabTextActive]}>รายละเอียด</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ===== Loading State ===== */}
       {loading ? (
@@ -1058,11 +1078,11 @@ const HistoryScreen = () => {
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
               contentContainerStyle={styles.scrollContent}
             >
-              {/* Late Threshold Filter - แยก Input จาก Apply */}
+              {/* Late Threshold Filter */}
               <View style={styles.filterCard}>
                 <View style={styles.filterHeader}>
                   <Ionicons name="time-outline" size={20} color="#4facfe" />
-                  <Text style={styles.filterLabel}>เกณฑ์กินช้า (ชั่วโมง)</Text>
+                  <Text style={styles.filterLabel}>เกณฑ์กินช้า</Text>
                 </View>
 
                 <View style={styles.thresholdRow}>
@@ -1071,41 +1091,65 @@ const HistoryScreen = () => {
                       style={styles.thresholdInput}
                       value={tempThreshold}
                       onChangeText={(text) => {
-                        // อนุญาตเฉพาะตัวเลขและจุดทศนิยม
                         if (/^\d*\.?\d*$/.test(text) || text === '') {
                           setTempThreshold(text);
                         }
                       }}
                       keyboardType="decimal-pad"
-                      placeholder="1.0"
+                      placeholder="5"
                       maxLength={5}
                     />
-                    <Text style={styles.thresholdUnit}>ชั่วโมง</Text>
+                    <Text style={styles.thresholdUnit}>
+                      {thresholdUnit === 'minutes' ? 'นาที' : 'ชั่วโมง'}
+                    </Text>
                   </View>
+
+                  {/* ✅ Toggle Unit */}
+                  <TouchableOpacity
+                    style={styles.unitToggleBtn}
+                    onPress={() => {
+                      if (thresholdUnit === 'minutes') {
+                        // แปลงจากนาทีเป็นชั่วโมง
+                        const hours = (parseFloat(tempThreshold) / 60).toFixed(2);
+                        setTempThreshold(hours);
+                        setThresholdUnit('hours');
+                      } else {
+                        // แปลงจากชั่วโมงเป็นนาที
+                        const minutes = Math.round(parseFloat(tempThreshold) * 60);
+                        setTempThreshold(minutes.toString());
+                        setThresholdUnit('minutes');
+                      }
+                    }}
+                  >
+                    <Ionicons name="swap-vertical" size={18} color="#4facfe" />
+                    <Text style={styles.unitToggleBtnText}>
+                      {thresholdUnit === 'minutes' ? 'ชั่วโมง' : 'นาที'}
+                    </Text>
+                  </TouchableOpacity>
 
                   {/* ✅ ปุ่ม Apply */}
                   <TouchableOpacity
                     style={[
                       styles.applyBtn,
-                      tempThreshold === lateThreshold && styles.applyBtnDisabled
+                      convertToHours(tempThreshold, thresholdUnit) === lateThreshold && styles.applyBtnDisabled
                     ]}
                     onPress={() => {
                       if (tempThreshold && parseFloat(tempThreshold) > 0) {
-                        setLateThreshold(tempThreshold);
+                        setLateThreshold(convertToHours(tempThreshold, thresholdUnit));
                       } else {
                         Alert.alert('ข้อผิดพลาด', 'กรุณากรอกค่ามากกว่า 0');
                       }
                     }}
-                    disabled={tempThreshold === lateThreshold}
+                    disabled={convertToHours(tempThreshold, thresholdUnit) === lateThreshold}
                   >
                     <Ionicons
                       name="checkmark-circle"
                       size={18}
-                      color={tempThreshold === lateThreshold ? '#ccc' : '#fff'}
+                      color={convertToHours(tempThreshold, thresholdUnit) === lateThreshold ? '#ccc' : '#fff'}
                     />
                     <Text style={[
                       styles.applyBtnText,
-                      tempThreshold === lateThreshold && styles.applyBtnTextDisabled
+                      convertToHours(tempThreshold, thresholdUnit) === lateThreshold && styles.applyBtnTextDisabled
                     ]}>
                       ใช้งาน
                     </Text>
@@ -1114,23 +1158,24 @@ const HistoryScreen = () => {
 
                 {/* Quick Presets */}
                 <View style={styles.thresholdButtons}>
-                  {['0.5', '1', '2', '3'].map(hr => (
+                  {['5', '10', '30', '60'].map(val => (
                     <TouchableOpacity
-                      key={hr}
+                      key={val}
                       style={[
                         styles.thresholdBtn,
-                        lateThreshold === hr && styles.thresholdBtnActive
+                        convertToHours(val, 'minutes') === lateThreshold && styles.thresholdBtnActive
                       ]}
                       onPress={() => {
-                        setTempThreshold(hr);
-                        setLateThreshold(hr);
+                        setTempThreshold(val);
+                        setThresholdUnit('minutes');
+                        setLateThreshold(convertToHours(val, 'minutes'));
                       }}
                     >
                       <Text style={[
                         styles.thresholdBtnText,
-                        lateThreshold === hr && styles.thresholdBtnTextActive
+                        convertToHours(val, 'minutes') === lateThreshold && styles.thresholdBtnTextActive
                       ]}>
-                        {parseFloat(hr) < 1 ? `${parseFloat(hr) * 60} นาที` : `${hr} ชม.`}
+                        {val} นาที
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -1329,21 +1374,7 @@ const HistoryScreen = () => {
                           })}
                         </View>
 
-                        {/* คำอธิบายสี */}
-                        <View style={styles.pieChartColorGuide}>
-                          <Text style={styles.pieChartColorGuideTitle}>💡 คำอธิบายสี</Text>
-                          <View style={styles.pieChartColorGuideGrid}>
-                            {chartColors.map((item, idx) => (
-                              <View key={idx} style={styles.pieChartColorGuideItem}>
-                                <View style={[
-                                  styles.pieChartColorGuideColor,
-                                  { backgroundColor: item.color }
-                                ]} />
-                                <Text style={styles.pieChartColorGuideLabel}>{item.label}</Text>
-                              </View>
-                            ))}
-                          </View>
-                        </View>
+                        
                       </View>
                     );
                   })()
@@ -1470,223 +1501,226 @@ const HistoryScreen = () => {
           )}
 
 
-          {viewMode === 'details' && (
-  <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
-    {/* Header Card */}
-    <View style={styles.detailsViewHeader}>
-      <Ionicons name="document-text" size={24} color="#4facfe" />
-      <Text style={styles.detailsViewTitle}>รายละเอียดการกินยา</Text>
-    </View>
+          {viewMode === 'details' && !selectedMedicationId ? (
+            <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
+              {/* Header Card */}
+              <View style={styles.detailsViewHeader}>
+                <Ionicons name="document-text" size={24} color="#4facfe" />
+                <Text style={styles.detailsViewTitle}>รายละเอียดการกินยา</Text>
+              </View>
 
-    {/* Main Content */}
-    <ScrollView 
-      style={{ flex: 1 }} 
-      contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 24 }}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Medication Selector */}
-      <View style={styles.medicationSelectorCard}>
-        <Text style={styles.medicationListTitle}>📋 เลือกยาเพื่อดูรายละเอียด</Text>
-
-        {/* ปุ่มแสดงทั้งหมด */}
-        <TouchableOpacity
-          style={[
-            styles.medicationSelectItem,
-            selectedMedicationId === null && styles.medicationSelectItemActive
-          ]}
-          onPress={() => setSelectedMedicationId(null)}
-          activeOpacity={0.7}
-        >
-          <View style={[
-            styles.medicationSelectIcon,
-            selectedMedicationId === null && styles.medicationSelectIconActive
-          ]}>
-            <Ionicons
-              name="albums"
-              size={24}
-              color={selectedMedicationId === null ? '#fff' : '#4facfe'}
-            />
-          </View>
-          <View style={styles.medicationSelectContent}>
-            <Text style={[
-              styles.medicationSelectName,
-              selectedMedicationId === null && styles.medicationSelectNameActive
-            ]}>
-              ทั้งหมด
-            </Text>
-            <Text style={[
-              styles.medicationSelectSubtext,
-              selectedMedicationId === null && styles.medicationSelectSubtextActive
-            ]}>
-              {rows.length} รายการ
-            </Text>
-          </View>
-          {selectedMedicationId === null && (
-            <Ionicons name="checkmark-circle" size={28} color="#fff" />
-          )}
-        </TouchableOpacity>
-
-        {/* Divider */}
-        <View style={styles.medicationSelectDivider} />
-
-        {/* รายการยาแต่ละตัว */}
-        {medStats.map((item, index) => {
-          const isSelected = selectedMedicationId === item.MedicationID;
-          const adherenceRate = item.TotalScheduled > 0
-            ? ((item.TotalTaken / item.TotalScheduled) * 100).toFixed(0)
-            : 0;
-
-          return (
-            <View key={item.MedicationID}>
-              <TouchableOpacity
-                style={[
-                  styles.medicationSelectItem,
-                  isSelected && styles.medicationSelectItemActive
-                ]}
-                onPress={() => setSelectedMedicationId(item.MedicationID)}
-                activeOpacity={0.7}
+              {/* Main Content */}
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 24 }}
+                showsVerticalScrollIndicator={false}
               >
-                <View style={[
-                  styles.medicationSelectIcon,
-                  isSelected && styles.medicationSelectIconActive
-                ]}>
-                  <Ionicons
-                    name="medical"
-                    size={24}
-                    color={isSelected ? '#fff' : '#4facfe'}
-                  />
-                </View>
-                <View style={styles.medicationSelectContent}>
-                  <Text
+                {/* Medication Selector */}
+                <View style={styles.medicationSelectorCard}>
+                  <Text style={styles.medicationListTitle}>📋 เลือกยาเพื่อดูรายละเอียด</Text>
+
+                  {/* ปุ่มแสดงทั้งหมด */}
+                  <TouchableOpacity
                     style={[
-                      styles.medicationSelectName,
-                      isSelected && styles.medicationSelectNameActive
+                      styles.medicationSelectItem,
+                      selectedMedicationId === null && styles.medicationSelectItemActive
                     ]}
-                    numberOfLines={1}
+                    onPress={() => setSelectedMedicationId(null)}
+                    activeOpacity={0.7}
                   >
-                    {item.MedicationName}
-                  </Text>
-                  <Text style={[
-                    styles.medicationSelectSubtext,
-                    isSelected && styles.medicationSelectSubtextActive
-                  ]}>
-                    {item.TotalTaken}/{item.TotalScheduled} ครั้ง • {adherenceRate}%
-                  </Text>
+                    <View style={[
+                      styles.medicationSelectIcon,
+                      selectedMedicationId === null && styles.medicationSelectIconActive
+                    ]}>
+                      <Ionicons
+                        name="albums"
+                        size={24}
+                        color={selectedMedicationId === null ? '#fff' : '#4facfe'}
+                      />
+                    </View>
+                    <View style={styles.medicationSelectContent}>
+                      <Text style={[
+                        styles.medicationSelectName,
+                        selectedMedicationId === null && styles.medicationSelectNameActive
+                      ]}>
+                        ทั้งหมด
+                      </Text>
+                      <Text style={[
+                        styles.medicationSelectSubtext,
+                        selectedMedicationId === null && styles.medicationSelectSubtextActive
+                      ]}>
+                        {rows.length} รายการ
+                      </Text>
+                    </View>
+                    {selectedMedicationId === null && (
+                      <Ionicons name="checkmark-circle" size={28} color="#fff" />
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Divider */}
+                  <View style={styles.medicationSelectDivider} />
+
+                  {/* รายการยาแต่ละตัว */}
+                  {medStats.map((item, index) => {
+                    const isSelected = selectedMedicationId === item.MedicationID;
+                    const adherenceRate = item.TotalScheduled > 0
+                      ? ((item.TotalTaken / item.TotalScheduled) * 100).toFixed(0)
+                      : 0;
+
+                    return (
+                      <View key={item.MedicationID}>
+                        <TouchableOpacity
+                          style={[
+                            styles.medicationSelectItem,
+                            isSelected && styles.medicationSelectItemActive
+                          ]}
+                          onPress={() => setSelectedMedicationId(item.MedicationID)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[
+                            styles.medicationSelectIcon,
+                            isSelected && styles.medicationSelectIconActive
+                          ]}>
+                            <Ionicons
+                              name="medical"
+                              size={24}
+                              color={isSelected ? '#fff' : '#4facfe'}
+                            />
+                          </View>
+                          <View style={styles.medicationSelectContent}>
+                            <Text
+                              style={[
+                                styles.medicationSelectName,
+                                isSelected && styles.medicationSelectNameActive
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {item.MedicationName}
+                            </Text>
+                            <Text style={[
+                              styles.medicationSelectSubtext,
+                              isSelected && styles.medicationSelectSubtextActive
+                            ]}>
+                              {item.TotalTaken}/{item.TotalScheduled} ครั้ง • {adherenceRate}%
+                            </Text>
+                          </View>
+                          <View style={[
+                            styles.medicationSelectBadge,
+                            {
+                              backgroundColor: isSelected
+                                ? 'rgba(255,255,255,0.25)'
+                                : parseFloat(adherenceRate) >= 80
+                                  ? '#e8f5e9'
+                                  : parseFloat(adherenceRate) >= 60
+                                    ? '#fff3e0'
+                                    : '#ffebee'
+                            }
+                          ]}>
+                            <Text style={[
+                              styles.medicationSelectPercentText,
+                              {
+                                color: isSelected
+                                  ? '#fff'
+                                  : parseFloat(adherenceRate) >= 80
+                                    ? '#28a745'
+                                    : parseFloat(adherenceRate) >= 60
+                                      ? '#ff9800'
+                                      : '#dc3545'
+                              }
+                            ]}>
+                              {adherenceRate}%
+                            </Text>
+                          </View>
+                          {isSelected && (
+                            <Ionicons name="checkmark-circle" size={28} color="#fff" />
+                          )}
+                        </TouchableOpacity>
+                        {index < medStats.length - 1 && (
+                          <View style={styles.medicationSelectDivider} />
+                        )}
+                      </View>
+                    );
+                  })}
                 </View>
-                <View style={[
-                  styles.medicationSelectBadge,
-                  {
-                    backgroundColor: isSelected
-                      ? 'rgba(255,255,255,0.25)'
-                      : parseFloat(adherenceRate) >= 80
-                        ? '#e8f5e9'
-                        : parseFloat(adherenceRate) >= 60
-                          ? '#fff3e0'
-                          : '#ffebee'
-                  }
-                ]}>
-                  <Text style={[
-                    styles.medicationSelectPercentText,
-                    {
-                      color: isSelected
-                        ? '#fff'
-                        : parseFloat(adherenceRate) >= 80
-                          ? '#28a745'
-                          : parseFloat(adherenceRate) >= 60
-                            ? '#ff9800'
-                            : '#dc3545'
-                    }
-                  ]}>
-                    {adherenceRate}%
-                  </Text>
-                </View>
-                {isSelected && (
-                  <Ionicons name="checkmark-circle" size={28} color="#fff" />
+
+                {/* Empty State - เมื่อยังไม่ได้เลือกยา */}
+                {selectedMedicationId === null && medStats.length === 0 && (
+                  <View style={styles.detailsEmptyState}>
+                    <View style={styles.detailsEmptyIconBox}>
+                      <Ionicons name="hand-left" size={48} color="#4facfe" />
+                    </View>
+                    <Text style={styles.detailsEmptyTitle}>ไม่มีข้อมูลยา</Text>
+                    <Text style={styles.detailsEmptySubtext}>
+                      ยังไม่มีข้อมูลการกินยาในช่วงเวลาที่เลือก
+                    </Text>
+                  </View>
                 )}
-              </TouchableOpacity>
-              {index < medStats.length - 1 && (
-                <View style={styles.medicationSelectDivider} />
+              </ScrollView>
+            </View>
+          ) : viewMode === 'details' && selectedMedicationId ? (
+            // ✅ Modal เด้งเต็มหน้าจอเมื่อเลือกยา - มีพื้นที่มากขึ้นเพราะซ่อน Tab
+            <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
+              {/* Header with Back Button */}
+              <View style={styles.detailsModalHeader}>
+                <TouchableOpacity
+                  onPress={() => setSelectedMedicationId(null)}
+                  style={styles.detailsModalBackBtn}
+                >
+                  <Ionicons name="chevron-back" size={28} color="#4facfe" />
+                </TouchableOpacity>
+                <View style={styles.detailsModalTitle}>
+                  <Text style={styles.detailsModalMedName} numberOfLines={2}>
+                    {medStats.find(m => m.MedicationID === selectedMedicationId)?.MedicationName || ''}
+                  </Text>
+                  <Text style={styles.detailsModalMedInfo}>
+                    {filteredDetailRows.length} รายการ
+                  </Text>
+                </View>
+                <View style={{ width: 40 }} />
+              </View>
+
+              {/* Sort Section */}
+              <View style={styles.detailsModalSort}>
+                <TouchableOpacity
+                  style={[styles.detailsSortBtn, sortBy === 'date' && styles.detailsSortBtnActive]}
+                  onPress={() => setSortBy('date')}
+                >
+                  <Ionicons name="calendar" size={16} color={sortBy === 'date' ? '#fff' : '#4facfe'} />
+                  <Text style={[styles.detailsSortBtnText, sortBy === 'date' && styles.detailsSortBtnTextActive]}>
+                    วันที่ล่าสุด
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.detailsSortBtn, sortBy === 'status' && styles.detailsSortBtnActive]}
+                  onPress={() => setSortBy('status')}
+                >
+                  <Ionicons name="flag" size={16} color={sortBy === 'status' ? '#fff' : '#4facfe'} />
+                  <Text style={[styles.detailsSortBtnText, sortBy === 'status' && styles.detailsSortBtnTextActive]}>
+                    สถานะ
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Records List */}
+              {filteredDetailRows.length > 0 ? (
+                <FlatList
+                  data={filteredDetailRows}
+                  keyExtractor={(i) => String(i.ScheduleID || `${i.MedicationID}_${i.Date}_${i.Time}`)}
+                  renderItem={renderDetailItem}
+                  refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                  contentContainerStyle={styles.detailsModalListContent}
+                  scrollEnabled={true}
+                />
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="document-text-outline" size={64} color="#ccc" />
+                  <Text style={styles.emptyText}>ไม่พบประวัติในช่วงนี้</Text>
+                  <Text style={styles.emptySubtext}>ยังไม่มีการบันทึกการกินยานี้</Text>
+                </View>
               )}
             </View>
-          );
-        })}
-      </View>
-
-      {/* Sort & Filter Section - แสดงเมื่อเลือกยาแล้ว */}
-      {selectedMedicationId !== null && (
-        <View style={styles.detailsSortCard}>
-          <View style={styles.detailsSortHeader}>
-            <Ionicons name="funnel" size={18} color="#4facfe" />
-            <Text style={styles.detailsSortTitle}>จัดเรียงตาม</Text>
-          </View>
-          <View style={styles.detailsSortButtons}>
-            <TouchableOpacity
-              style={[styles.detailsSortBtn, sortBy === 'date' && styles.detailsSortBtnActive]}
-              onPress={() => setSortBy('date')}
-            >
-              <Ionicons name="calendar" size={16} color={sortBy === 'date' ? '#fff' : '#4facfe'} />
-              <Text style={[styles.detailsSortBtnText, sortBy === 'date' && styles.detailsSortBtnTextActive]}>
-                วันที่ล่าสุด
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.detailsSortBtn, sortBy === 'status' && styles.detailsSortBtnActive]}
-              onPress={() => setSortBy('status')}
-            >
-              <Ionicons name="flag" size={16} color={sortBy === 'status' ? '#fff' : '#4facfe'} />
-              <Text style={[styles.detailsSortBtnText, sortBy === 'status' && styles.detailsSortBtnTextActive]}>
-                สถานะ
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.detailsCountBadge}>
-            <Ionicons name="list" size={14} color="#4facfe" />
-            <Text style={styles.detailsCountText}>
-              พบ {filteredDetailRows.length} รายการ
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* Empty State - เมื่อยังไม่ได้เลือกยา */}
-      {selectedMedicationId === null && medStats.length === 0 && (
-        <View style={styles.detailsEmptyState}>
-          <View style={styles.detailsEmptyIconBox}>
-            <Ionicons name="hand-left" size={48} color="#4facfe" />
-          </View>
-          <Text style={styles.detailsEmptyTitle}>ไม่มีข้อมูลยา</Text>
-          <Text style={styles.detailsEmptySubtext}>
-            ยังไม่มีข้อมูลการกินยาในช่วงเวลาที่เลือก
-          </Text>
-        </View>
-      )}
-    </ScrollView>
-
-    {/* Records List - แสดงเมื่อเลือกยาแล้ว */}
-    {selectedMedicationId !== null && (
-      <View style={{ flex: 1.2, backgroundColor: '#f8f9fa' }}>
-        {filteredDetailRows.length > 0 ? (
-          <FlatList
-            data={filteredDetailRows}
-            keyExtractor={(i) => String(i.ScheduleID || `${i.MedicationID}_${i.Date}_${i.Time}`)}
-            renderItem={renderDetailItem}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            contentContainerStyle={styles.detailsListContent}
-            scrollEnabled={true}
-          />
-        ) : (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="document-text-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>ไม่พบประวัติในช่วงนี้</Text>
-            <Text style={styles.emptySubtext}>ยังไม่มีการบันทึกการกินยานี้</Text>
-          </View>
-        )}
-      </View>
-    )}
-  </View>
-)}
+          ) : null}
         </>
       )}
 
@@ -2698,105 +2732,105 @@ const styles = StyleSheet.create({
 
   // ===== Details Sort Card =====
   detailsSortCard: {
-  backgroundColor: '#fff',
-  borderRadius: 12,
-  padding: 16,
-  marginBottom: 16,
-  elevation: 2,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 1 },
-  shadowOpacity: 0.1,
-  shadowRadius: 2
-},
-detailsSortHeader: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 8,
-  marginBottom: 12
-},
-detailsSortTitle: {
-  fontSize: 14,
-  fontWeight: '600',
-  color: '#333'
-},
-detailsSortButtons: {
-  flexDirection: 'row',
-  gap: 8,
-  marginBottom: 12
-},
-detailsSortBtn: {
-  flex: 1,
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 6,
-  paddingVertical: 10,
-  borderRadius: 8,
-  backgroundColor: '#f8f9fa',
-  borderWidth: 2,
-  borderColor: '#e1e8ed'
-},
-detailsSortBtnActive: {
-  backgroundColor: '#4facfe',
-  borderColor: '#4facfe'
-},
-detailsSortBtnText: {
-  fontSize: 13,
-  fontWeight: '600',
-  color: '#4facfe'
-},
-detailsSortBtnTextActive: {
-  color: '#fff'
-},
-detailsCountBadge: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 6,
-  paddingVertical: 8,
-  paddingHorizontal: 12,
-  backgroundColor: '#e3f2fd',
-  borderRadius: 20,
-  alignSelf: 'center'
-},
-detailsCountText: {
-  fontSize: 12,
-  fontWeight: '600',
-  color: '#4facfe'
-},
-detailsListContent: {
-  padding: 12,
-  paddingBottom: 24
-},
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2
+  },
+  detailsSortHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12
+  },
+  detailsSortTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333'
+  },
+  detailsSortButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12
+  },
+  detailsSortBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#f8f9fa',
+    borderWidth: 2,
+    borderColor: '#e1e8ed'
+  },
+  detailsSortBtnActive: {
+    backgroundColor: '#4facfe',
+    borderColor: '#4facfe'
+  },
+  detailsSortBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4facfe'
+  },
+  detailsSortBtnTextActive: {
+    color: '#fff'
+  },
+  detailsCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#e3f2fd',
+    borderRadius: 20,
+    alignSelf: 'center'
+  },
+  detailsCountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4facfe'
+  },
+  detailsListContent: {
+    padding: 12,
+    paddingBottom: 24
+  },
 
   // ===== Details Empty State =====
   detailsEmptyState: {
-  flex: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-  paddingVertical: 60
-},
-detailsEmptyIconBox: {
-  width: 100,
-  height: 100,
-  borderRadius: 50,
-  backgroundColor: '#e3f2fd',
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginBottom: 20
-},
-detailsEmptyTitle: {
-  fontSize: 18,
-  fontWeight: 'bold',
-  color: '#333',
-  marginBottom: 8
-},
-detailsEmptySubtext: {
-  fontSize: 14,
-  color: '#999',
-  textAlign: 'center',
-  lineHeight: 20,
-  paddingHorizontal: 30
-},
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60
+  },
+  detailsEmptyIconBox: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#e3f2fd',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20
+  },
+  detailsEmptyTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8
+  },
+  detailsEmptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 30
+  },
 
   // ===== Empty State =====
   emptyContainer: {
@@ -3014,90 +3048,157 @@ detailsEmptySubtext: {
     marginTop: 2
   },
   // ===== Medication Selector Card (ใหม่) =====
-medicationSelectorCard: {
-  backgroundColor: '#fff',
-  borderRadius: 12,
-  padding: 16,
-  marginTop: 12,
-  marginBottom: 16,
-  elevation: 2,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 1 },
-  shadowOpacity: 0.1,
-  shadowRadius: 2
-},
+  medicationSelectorCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2
+  },
 
-// ===== Medication Select Item (ใหม่) =====
-medicationSelectItem: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  padding: 14,
-  backgroundColor: '#f8f9fa',
-  borderRadius: 12,
-  marginBottom: 10,
-  borderWidth: 2,
-  borderColor: 'transparent',
-  gap: 12
-},
-medicationSelectItemActive: {
-  backgroundColor: '#4facfe',
-  borderColor: '#3d8fd7',
-  elevation: 3,
-  shadowColor: '#4facfe',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 4
-},
+  // ===== Medication Select Item (ใหม่) =====
+  medicationSelectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    gap: 12
+  },
+  medicationSelectItemActive: {
+    backgroundColor: '#4facfe',
+    borderColor: '#3d8fd7',
+    elevation: 3,
+    shadowColor: '#4facfe',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4
+  },
 
-// ===== Medication Select Icon =====
-medicationSelectIcon: {
-  width: 50,
-  height: 50,
-  borderRadius: 12,
-  backgroundColor: '#e3f2fd',
-  justifyContent: 'center',
-  alignItems: 'center'
-},
-medicationSelectIconActive: {
-  backgroundColor: 'rgba(255,255,255,0.25)'
-},
+  // ===== Medication Select Icon =====
+  medicationSelectIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: '#e3f2fd',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  medicationSelectIconActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)'
+  },
 
-// ===== Medication Select Content =====
-medicationSelectContent: {
-  flex: 1
-},
-medicationSelectName: {
-  fontSize: 16,
-  fontWeight: 'bold',
-  color: '#333',
-  marginBottom: 4
-},
-medicationSelectNameActive: {
-  color: '#fff'
-},
-medicationSelectSubtext: {
-  fontSize: 12,
-  color: '#666'
-},
-medicationSelectSubtextActive: {
-  color: 'rgba(255,255,255,0.9)'
-},
+  // ===== Medication Select Content =====
+  medicationSelectContent: {
+    flex: 1
+  },
+  medicationSelectName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4
+  },
+  medicationSelectNameActive: {
+    color: '#fff'
+  },
+  medicationSelectSubtext: {
+    fontSize: 12,
+    color: '#666'
+  },
+  medicationSelectSubtextActive: {
+    color: 'rgba(255,255,255,0.9)'
+  },
 
-// ===== Medication Select Badge =====
-medicationSelectBadge: {
-  paddingVertical: 4,
-  paddingHorizontal: 10,
-  borderRadius: 12
-},
-medicationSelectPercentText: {
-  fontSize: 13,
-  fontWeight: 'bold'
-},
+  // ===== Medication Select Badge =====
+  medicationSelectBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12
+  },
+  medicationSelectPercentText: {
+    fontSize: 13,
+    fontWeight: 'bold'
+  },
 
-// ===== Medication Select Divider =====
-medicationSelectDivider: {
-  height: 1,
-  backgroundColor: '#f0f0f0',
-  marginVertical: 8
-},
+  // ===== Medication Select Divider =====
+  medicationSelectDivider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginVertical: 8
+  },
+  //Styles สำหรับ Unit Toggle
+  unitToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e1e8ed'
+  },
+  unitToggleBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4facfe'
+  },
+
+  // Details Modal
+  detailsModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2
+  },
+  detailsModalBackBtn: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  detailsModalTitle: {
+    flex: 1,
+    marginHorizontal: 12
+  },
+  detailsModalMedName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333'
+  },
+  detailsModalMedInfo: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4
+  },
+  detailsModalSort: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0'
+  },
+  detailsModalListContent: {
+    padding: 12,
+    paddingBottom: 24
+  },
 });

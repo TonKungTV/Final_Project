@@ -98,26 +98,41 @@ const CalendarScreen = ({ navigation }) => {
     };
 
     const updateSelectedDayMeds = (dateStr, data = medicationsData) => {
-        const dayData = data[dateStr] || [];
-        const mapped = dayData.map((r, i) => ({
-            id: r.ScheduleID || `${r.MedicationID}-${i}`,
-            scheduleId: r.ScheduleID || null,
-            medicationId: r.MedicationID,
-            time: r.Time ? r.Time.slice(0, 5) : '',
-            rawTime: r.Time,
-            name: r.name,
-            dose: r.Dosage != null && r.DosageType ? `${r.Dosage} ${r.DosageType}` : '-',
-            status: r.Status && r.Status.trim() !== '' ? r.Status : 'ไม่ระบุ',
-            mealName: r.MealName || '',
-            medType: r.TypeName || '-',
-            importance: r.PriorityLabel || 'ปกติ',
-            actualTime: r.ActualTime || null,
-            sideEffects: r.SideEffects || null,
-            lateMinutes: r.LateMinutes || 0,
-            isLate: r.IsLate || 0,
-        }));
-        setSelectedDayMeds(mapped);
+  const dayData = data[dateStr] || [];
+  
+  const mapped = dayData.map((r, i) => {
+    // ✅ Clean MealName อย่างเข้มงวด
+    let mealDisplay = 'ไม่ระบุ';
+    
+    if (r.MealName !== null && r.MealName !== undefined && r.MealName !== '') {
+      const trimmed = String(r.MealName).trim();
+      if (trimmed.length > 0 && trimmed !== 'null' && trimmed !== 'undefined') {
+        mealDisplay = trimmed;
+      }
+    }
+
+    return {
+      id: r.ScheduleID || `${r.MedicationID}-${i}`,
+      scheduleId: r.ScheduleID || null,
+      medicationId: r.MedicationID,
+      time: r.Time ? r.Time.slice(0, 5) : '',
+      rawTime: r.Time,
+      name: r.name,
+      dose: r.Dosage != null && r.DosageType ? `${r.Dosage} ${r.DosageType}` : '-',
+      status: r.Status && r.Status.trim() !== '' ? r.Status : 'ไม่ระบุ',
+      // ✅ ใช้ mealDisplay ที่ clean แล้ว
+      mealName: mealDisplay,
+      medType: r.TypeName || '-',
+      importance: r.PriorityLabel || 'ปกติ',
+      actualTime: r.ActualTime || null,
+      sideEffects: r.SideEffects || null,
+      lateMinutes: r.LateMinutes || 0,
+      isLate: r.IsLate || 0,
     };
+  });
+
+  setSelectedDayMeds(mapped);
+};
 
     useEffect(() => {
         loadMedicationsForMonth();
