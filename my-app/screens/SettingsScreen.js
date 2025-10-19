@@ -12,10 +12,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from './config';
 
 const settings = [
-  { id: 1, label: 'ข้อมูลส่วนตัว', icon: 'person-circle-outline' },
-  { id: 2, label: 'เวลามื้ออาหาร', icon: 'restaurant-outline' },
-  { id: 3, label: 'ลบบัญชี', icon: 'trash-outline' },
-  { id: 4, label: 'ออกจากระบบ', icon: 'log-out-outline' },
+  { id: 1, label: 'ข้อมูลส่วนตัว', icon: 'person-circle-outline', color: '#4dabf7' },
+  { id: 2, label: 'เวลามื้ออาหาร', icon: 'restaurant-outline', color: '#51cf66' },
+  { id: 3, label: 'ลบบัญชี', icon: 'trash-outline', color: '#ff6b6b' },
+  { id: 4, label: 'ออกจากระบบ', icon: 'log-out-outline', color: '#ff8787' },
 ];
 
 const SettingsScreen = ({ navigation, onLogout }) => {
@@ -190,39 +190,37 @@ const SettingsScreen = ({ navigation, onLogout }) => {
         <Text style={styles.headerText}>การตั้งค่า</Text>
       </View>
 
+      <View style={styles.content}>
       {settings.map(item => (
         <TouchableOpacity
           key={item.id}
           style={styles.card}
           onPress={() => handlePress(item.label)}
           disabled={deleteLoading}
+          activeOpacity={0.7}
         >
-          <View style={styles.cardContent}>
+          <View style={[styles.iconContainer, { backgroundColor: item.color + '15' }]}>
             <Ionicons
               name={item.icon}
-              size={22}
-              color={item.label === 'ออกจากระบบ' || item.label === 'ลบบัญชี' ? '#dc3545' : '#3b3b3b'}
-              style={styles.leftIcon}
+              size={24}
+              color={item.color}
             />
-            <Text
-              style={[
-                styles.cardText,
-                (item.label === 'ออกจากระบบ' || item.label === 'ลบบัญชี') && { color: '#dc3545' }
-              ]}
-            >
-              {item.label}
-            </Text>
-            {(item.label === 'ข้อมูลส่วนตัว' || item.label === 'เวลามื้ออาหาร') && (
-              <Ionicons name="chevron-forward-outline" size={20} color="#555" style={styles.rightIcon} />
-            )}
-            {deleteLoading && item.label === 'ลบบัญชี' && (
-              <ActivityIndicator size="small" color="#dc3545" style={styles.rightIcon} />
+          </View>
+          <Text style={styles.cardText}>{item.label}</Text>
+          <View style={styles.rightSection}>
+            {deleteLoading && item.label === 'ลบบัญชี' ? (
+              <ActivityIndicator size="small" color={item.color} />
+            ) : (
+              (item.label === 'ข้อมูลส่วนตัว' || item.label === 'เวลามื้ออาหาร') && (
+                <Ionicons name="chevron-forward" size={20} color="#bbb" />
+              )
             )}
           </View>
         </TouchableOpacity>
       ))}
     </View>
-  );
+  </View>
+);
 };
 
 export default SettingsScreen;
@@ -250,26 +248,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 10,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  cardContent: {
+    paddingVertical: 18,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  leftIcon: {
-    marginRight: 12,
-  },
-  rightIcon: {
-    marginLeft: 'auto',
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   cardText: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: 17,
+    color: '#2c3e50',
+    fontWeight: '500',
     flex: 1,
+  },
+  rightSection: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 13,
+    color: '#95a5a6',
+    fontWeight: '500',
   },
 });

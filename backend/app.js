@@ -63,7 +63,7 @@ app.post('/api/register', async (req, res) => {
       [name, email, phone, gender, birthDate, bloodType, hashedPassword],
       (err, result) => {
         if (err) {
-          console.error('❌ Database error:', err);
+          console.error('Database error:', err);
 
           // ตรวจสอบ duplicate email
           if (err.code === 'ER_DUP_ENTRY') {
@@ -74,9 +74,9 @@ app.post('/api/register', async (req, res) => {
         }
 
         const newUserId = result.insertId;
-        console.log('✅ User registered successfully:', newUserId);
+        console.log(' User registered successfully:', newUserId);
 
-        // ✅ สร้าง Default Meal Times สำหรับ user ใหม่
+        // สร้าง Default Meal Times สำหรับ user ใหม่
         const defaultMealTimes = [
           { MealID: 1, Time: '08:00:00', MealName: 'เช้า' },      // เช้า
           { MealID: 2, Time: '12:00:00', MealName: 'เที่ยง' },   // เที่ยง
@@ -96,7 +96,7 @@ app.post('/api/register', async (req, res) => {
                 console.error(`❌ Failed to create meal time for MealID ${MealID}:`, err);
                 reject(err);
               } else {
-                console.log(`✅ Created default meal time: MealID ${MealID} at ${Time}`);
+                console.log(` Created default meal time: MealID ${MealID} at ${Time}`);
                 resolve(result);
               }
             });
@@ -106,7 +106,7 @@ app.post('/api/register', async (req, res) => {
         // รอให้สร้าง meal times ทั้งหมดเสร็จ
         Promise.all(mealTimePromises)
           .then(() => {
-            console.log('✅ All default meal times created successfully for user:', newUserId);
+            console.log(' All default meal times created successfully for user:', newUserId);
 
             res.status(201).json({
               success: true,
@@ -124,12 +124,12 @@ app.post('/api/register', async (req, res) => {
             });
           })
           .catch(mealTimeErr => {
-            console.error('❌ Error creating default meal times:', mealTimeErr);
+            console.error('Error creating default meal times:', mealTimeErr);
 
             // ถ้าสร้าง meal times ไม่สำเร็จ ให้ลบ user ที่สร้างไปแล้ว
             db.query('DELETE FROM users WHERE UserID = ?', [newUserId], (deleteErr) => {
               if (deleteErr) {
-                console.error('❌ Failed to rollback user creation:', deleteErr);
+                console.error('Failed to rollback user creation:', deleteErr);
               }
             });
 
@@ -140,12 +140,12 @@ app.post('/api/register', async (req, res) => {
       }
     );
   } catch (err) {
-    console.error('❌ Server error:', err);
+    console.error('Server error:', err);
     res.status(500).json({ error: 'เกิดข้อผิดพลาดในการสมัครสมาชิก' });
   }
 });
 
-// ✅ LOGIN
+// LOGIN
 app.post('/api/login', (req, res) => {
   const { Email, Password } = req.body;
 
@@ -190,6 +190,7 @@ app.get('/api/usagemeal', (req, res) => {
     })));
   });
 });
+
 app.get('/api/users', (req, res) => {
   db.query('SELECT * FROM users', (err, results) => {
     if (err) return res.status(500).json({ error: err });
@@ -212,13 +213,13 @@ app.delete('/api/user/:id', (req, res) => {
   }
 
   try {
-    // ✅ ตรวจสอบรหัสผ่าน
+    // ตรวจสอบรหัสผ่าน
     db.query(
       'SELECT Password FROM users WHERE UserID = ?',
       [userId],
       async (err, userResult) => {
         if (err) {
-          console.error('❌ Error fetching user:', err);
+          console.error('Error fetching user:', err);
           return res.status(500).json({ error: 'Database error', details: err.message });
         }
 
@@ -233,9 +234,9 @@ app.delete('/api/user/:id', (req, res) => {
           return res.status(401).json({ error: 'Invalid password' });
         }
 
-        console.log(`🗑️ Starting account deletion for UserID: ${userId}`);
+        console.log(`Starting account deletion for UserID: ${userId}`);
 
-        // ✅ ลบตามลำดับ
+        // ลบตามลำดับ
         const deleteStep1 = () => {
           db.query(
             `DELETE FROM medicationschedule 
@@ -243,10 +244,10 @@ app.delete('/api/user/:id', (req, res) => {
             [userId],
             (err) => {
               if (err) {
-                console.error('❌ Error deleting schedules:', err);
+                console.error('Error deleting schedules:', err);
                 return res.status(500).json({ error: 'Failed to delete schedules' });
               }
-              console.log(`✅ Deleted medication schedules`);
+              console.log(` Deleted medication schedules`);
               deleteStep2();
             }
           );
@@ -259,10 +260,10 @@ app.delete('/api/user/:id', (req, res) => {
             [userId],
             (err) => {
               if (err) {
-                console.error('❌ Error deleting default times:', err);
+                console.error('Error deleting default times:', err);
                 return res.status(500).json({ error: 'Failed to delete default times' });
               }
-              console.log(`✅ Deleted medication default times`);
+              console.log(`Deleted medication default times`);
               deleteStep3();
             }
           );
@@ -275,10 +276,10 @@ app.delete('/api/user/:id', (req, res) => {
             [userId],
             (err) => {
               if (err) {
-                console.error('❌ Error deleting logs:', err);
+                console.error('Error deleting logs:', err);
                 return res.status(500).json({ error: 'Failed to delete logs' });
               }
-              console.log(`✅ Deleted medication logs`);
+              console.log(`Deleted medication logs`);
               deleteStep4();
             }
           );
@@ -290,10 +291,10 @@ app.delete('/api/user/:id', (req, res) => {
             [userId],
             (err) => {
               if (err) {
-                console.error('❌ Error deleting medications:', err);
+                console.error('Error deleting medications:', err);
                 return res.status(500).json({ error: 'Failed to delete medications' });
               }
-              console.log(`✅ Deleted medications`);
+              console.log(`Deleted medications`);
               deleteStep5();
             }
           );
@@ -305,10 +306,10 @@ app.delete('/api/user/:id', (req, res) => {
             [userId],
             (err) => {
               if (err) {
-                console.error('❌ Error deleting meal times:', err);
+                console.error('Error deleting meal times:', err);
                 return res.status(500).json({ error: 'Failed to delete meal times' });
               }
-              console.log(`✅ Deleted user meal times`);
+              console.log(`Deleted user meal times`);
               deleteStep6();
             }
           );
@@ -320,10 +321,10 @@ app.delete('/api/user/:id', (req, res) => {
             [userId],
             (err) => {
               if (err) {
-                console.error('❌ Error deleting user:', err);
+                console.error('Error deleting user:', err);
                 return res.status(500).json({ error: 'Failed to delete user' });
               }
-              console.log(`✅ Deleted user account`);
+              console.log(`Deleted user account`);
               
               res.json({
                 success: true,
@@ -339,7 +340,7 @@ app.delete('/api/user/:id', (req, res) => {
     );
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('Error:', error);
     res.status(500).json({
       error: 'Failed to delete account',
       details: error.message
@@ -351,7 +352,7 @@ app.delete('/api/user/:id', (req, res) => {
 // /api/medications
 app.post('/api/medications', (req, res) => {
   const data = req.body;
-  console.log('📦 /api/medications payload:', data);
+  console.log('/api/medications payload:', data);
 
   let {
     UserID, Name, Note, GroupID, TypeID, Dosage,
@@ -359,7 +360,7 @@ app.post('/api/medications', (req, res) => {
     StartDate, EndDate, Frequency,
     DefaultTime_ID_1, DefaultTime_ID_2, DefaultTime_ID_3, DefaultTime_ID_4,
     CustomValue, WeekDays, MonthDays, Cycle_Use_Days, Cycle_Rest_Days, OnDemand,
-    StartTime // ✅ เพิ่ม StartTime
+    StartTime // เพิ่ม StartTime
   } = data;
 
   const userIdNum = parseInt(UserID, 10);
@@ -380,11 +381,11 @@ app.post('/api/medications', (req, res) => {
   const FrequencyID = selectedFrequency ? selectedFrequency.id : null;
 
   if (!FrequencyID) {
-    console.error('❌ FrequencyID is not defined');
+    console.error('FrequencyID is not defined');
     return res.status(400).json({ error: { message: 'Frequency is invalid' } });
   }
 
-  // ✅ Validate StartTime สำหรับ every_X_hours
+  //Validate StartTime สำหรับ every_X_hours
   if (Frequency === 'every_X_hours') {
     if (!StartTime) {
       return res.status(400).json({ error: { message: 'StartTime is required for every_X_hours frequency' } });
@@ -402,7 +403,7 @@ app.post('/api/medications', (req, res) => {
   Priority = Priority ? parseInt(Priority, 10) : 1;
   UsageMealID = (UsageMealID === undefined || UsageMealID === null) ? null : parseInt(UsageMealID, 10);
 
-  // ✅ สำหรับ every_X_hours ไม่ต้องใช้ DefaultTime_IDs
+  // สำหรับ every_X_hours ไม่ต้องใช้ DefaultTime_IDs
   const defaultTimeIds = Frequency === 'every_X_hours'
     ? []
     : [DefaultTime_ID_1, DefaultTime_ID_2, DefaultTime_ID_3, DefaultTime_ID_4]
@@ -418,7 +419,7 @@ app.post('/api/medications', (req, res) => {
   const OnDemandFlag = OnDemand ? 1 : 0;
 
   const sendDbError = (label, err) => {
-    console.error(`❌ ${label}:`, err);
+    console.error(`Error ${label}:`, err);
     return res.status(500).json({
       error: {
         code: err?.code,
@@ -447,7 +448,7 @@ app.post('/api/medications', (req, res) => {
   };
 
   const proceedInsert = (timeIDFinal) => {
-    // ✅ เพิ่ม StartTime ใน SQL
+    // เพิ่ม StartTime ใน SQL
     const insertMain = `
       INSERT INTO medication
       (userid, name, note, groupid, typeid, dosage, unitid, usagemealid, timeid, priority, startdate, enddate, frequencyid,
@@ -475,10 +476,10 @@ app.post('/api/medications', (req, res) => {
       CycleUseDaysNum,
       CycleRestDaysNum,
       OnDemandFlag,
-      StartTime || null // ✅ เพิ่ม StartTime
+      StartTime || null
     ];
 
-    console.log('📥 Inserting medication with params:', {
+    console.log('Inserting medication with params:', {
       params,
       Frequency,
       StartTime,
@@ -487,13 +488,13 @@ app.post('/api/medications', (req, res) => {
 
     db.query(insertMain, params, (err, result) => {
       if (err) {
-        console.error('❌ INSERT medication error:', err);
+        console.error('INSERT medication error:', err);
         return sendDbError('INSERT medication', err);
       }
 
       const medId = result.insertId;
 
-      // ✅ บันทึก log เริ่มต้นสำหรับยาใหม่
+      // บันทึก log เริ่มต้นสำหรับยาใหม่
       const today = new Date().toISOString().split('T')[0];
       db.query(
         `INSERT INTO medicationlog 
@@ -502,18 +503,18 @@ app.post('/api/medications', (req, res) => {
          ON DUPLICATE KEY UPDATE \`Count\` = \`Count\``,
         [medId, today],
         (logErr) => {
-          if (logErr) console.warn('⚠️ Failed to create initial log:', logErr);
+          if (logErr) console.warn('Failed to create initial log:', logErr);
         }
       );
 
       db.query('SELECT * FROM medication WHERE MedicationID = ?', [medId], (selErr, rows) => {
         if (selErr) {
-          console.error('❌ SELECT inserted medication error:', selErr);
+          console.error('SELECT inserted medication error:', selErr);
         } else {
-          console.log('✅ Inserted medication row:', rows[0]);
+          console.log('Inserted medication row:', rows[0]);
         }
 
-        // ✅ สำหรับ every_X_hours ไม่ต้อง insert medication_defaulttime
+        // สำหรับ every_X_hours ไม่ต้อง insert medication_defaulttime
         if (Frequency === 'every_X_hours' || defaultTimeIds.length === 0) {
           return res.status(201).json({
             id: medId,
@@ -539,7 +540,7 @@ app.post('/api/medications', (req, res) => {
     });
   };
 
-  // ✅ สำหรับ every_X_hours ไม่ต้อง getOrCreateTimeID
+  // สำหรับ every_X_hours ไม่ต้อง getOrCreateTimeID
   if (Frequency === 'every_X_hours') {
     proceedInsert(null);
   } else if ((UsageMealID === 2 || UsageMealID === 3) && PrePostTime != null) {
@@ -557,7 +558,6 @@ app.post('/api/medications', (req, res) => {
 });
 
 
-
 // Assuming you have express app and MySQL setup already
 app.delete('/api/medications/:id', (req, res) => {
   const medicationId = req.params.id;
@@ -565,40 +565,40 @@ app.delete('/api/medications/:id', (req, res) => {
   const deleteLogQuery = 'DELETE FROM medicationlog WHERE MedicationID = ?';
   db.query(deleteLogQuery, [medicationId], (err) => {
     if (err) {
-      console.error('❌ Error deleting medication logs:', err);
+      console.error('Error deleting medication logs:', err);
       return res.status(500).json({ error: 'Failed to delete medication logs' });
     }
 
-    console.log('✅ Deleted medication logs for MedicationID:', medicationId);
+    console.log('Deleted medication logs for MedicationID:', medicationId);
 
     const deleteScheduleQuery = 'DELETE FROM medicationschedule WHERE MedicationID = ?';
     db.query(deleteScheduleQuery, [medicationId], (err2) => {
       if (err2) {
-        console.error('❌ Error deleting medication schedule:', err2);
+        console.error('Error deleting medication schedule:', err2);
         return res.status(500).json({ error: 'Failed to delete medication schedule' });
       }
 
-      console.log('✅ Deleted medication schedules for MedicationID:', medicationId);
+      console.log('Deleted medication schedules for MedicationID:', medicationId);
 
 
       const deleteDefaultTimeQuery = 'DELETE FROM medication_defaulttime WHERE medicationid = ?';
       db.query(deleteDefaultTimeQuery, [medicationId], (err3) => {
         if (err3) {
-          console.error('❌ Error deleting medication default times:', err3);
+          console.error('Error deleting medication default times:', err3);
           return res.status(500).json({ error: 'Failed to delete medication default times' });
         }
 
-        console.log('✅ Deleted medication default times for MedicationID:', medicationId);
+        console.log('Deleted medication default times for MedicationID:', medicationId);
 
 
         const deleteMedicationQuery = 'DELETE FROM medication WHERE MedicationID = ?';
         db.query(deleteMedicationQuery, [medicationId], (err4) => {
           if (err4) {
-            console.error('❌ Error deleting medication:', err4);
+            console.error('Error deleting medication:', err4);
             return res.status(500).json({ error: 'Failed to delete medication' });
           }
 
-          console.log('✅ Medication deleted successfully, ID:', medicationId);
+          console.log('Medication deleted successfully, ID:', medicationId);
           res.status(200).json({
             success: true,
             message: 'Medication deleted successfully'
@@ -693,14 +693,14 @@ app.get('/api/medications/:id/times', (req, res) => {
 
   db.query(sql, [medicationId], (err, results) => {
     if (err) return res.status(500).json({ error: err });
-    res.json(results); // ✅ [{ MealName: 'เช้า', Time: '09:00:00' }, ...]
+    res.json(results); //[{ MealName: 'เช้า', Time: '09:00:00' }, ...]
   });
 });
 
 
 app.get('/api/medications/:id', (req, res) => {
   const id = req.params.id;
-  console.log('📥 MedicationID received:', id);
+  console.log('MedicationID received:', id);
 
   const sql = `
   SELECT 
@@ -735,7 +735,7 @@ app.get('/api/medications/:id', (req, res) => {
 
   db.query(sql, [id], (err, result) => {
     if (err) {
-      console.error('❌ Error fetching medication:', err);
+      console.error('Error fetching medication:', err);
       return res.status(500).json({ error: 'Database error' });
     }
     if (result.length === 0) {
@@ -751,7 +751,7 @@ app.get('/api/medications/:id', (req, res) => {
     row.MonthDays = monthDays;
     row.OnDemand = row.OnDemand === 1;
 
-    console.log('✅ Medication result:', row);
+    console.log('Medication result:', row);
     res.json(row);
   });
 });
@@ -826,12 +826,12 @@ app.get('/api/userdefaultmealtime/:userId', (req, res) => {
 
   db.query(query, [userId], (err, results) => {
     if (err) {
-      console.error('❌ Error fetching user meal times:', err);
+      console.error('Error fetching user meal times:', err);
       return res.status(500).json({ error: 'Failed to fetch meal times' });
     }
 
     if (results.length === 0) {
-      console.log('⚠️ No meal times found for user:', userId);
+      console.log('No meal times found for user:', userId);
 
       // สร้างค่าเริ่มต้นถ้ายังไม่มี
       const defaultTimes = [
@@ -862,14 +862,14 @@ app.get('/api/userdefaultmealtime/:userId', (req, res) => {
           });
         })
         .catch(err => {
-          console.error('❌ Error creating default meal times:', err);
+          console.error('Error creating default meal times:', err);
           res.status(500).json({ error: 'Failed to create default meal times' });
         });
 
       return;
     }
 
-    console.log(`✅ Fetched ${results.length} meal times for user ${userId}`);
+    console.log(`Fetched ${results.length} meal times for user ${userId}`);
     res.json(results);
   });
 });
@@ -908,7 +908,7 @@ function getOrCreateUsageMealID(MealName, TimeID, callback) {
 }
 
 
-// ✅ API ลบ duplicate medicationschedule
+// API ลบ duplicate medicationschedule
 app.delete('/api/medicationschedule/duplicates', (req, res) => {
   const userId = req.query.userId;
   const dateParam = req.query.date;
@@ -919,9 +919,9 @@ app.delete('/api/medicationschedule/duplicates', (req, res) => {
     });
   }
 
-  console.log(`🔍 Searching for duplicates on ${dateParam} for user ${userId}`);
+  console.log(`Searching for duplicates on ${dateParam} for user ${userId}`);
 
-  // ✅ หาทุก record ที่ซ้ำกัน (MedicationID + Date + Time เหมือนกัน)
+  // หาทุก record ที่ซ้ำกัน (MedicationID + Date + Time เหมือนกัน)
   const findDuplicateSql = `
     SELECT 
       MedicationID,
@@ -941,14 +941,14 @@ app.delete('/api/medicationschedule/duplicates', (req, res) => {
 
   db.query(findDuplicateSql, [userId, dateParam], (err, duplicates) => {
     if (err) {
-      console.error('❌ Error finding duplicates:', err);
+      console.error('Error finding duplicates:', err);
       return res.status(500).json({ error: 'Database error' });
     }
 
-    console.log(`📊 Found ${duplicates.length} groups with duplicates`);
+    console.log(`Found ${duplicates.length} groups with duplicates`);
 
     if (duplicates.length === 0) {
-      console.log('✅ No duplicates found');
+      console.log('No duplicates found');
       return res.json({
         message: 'No duplicates found',
         deletedCount: 0
@@ -960,10 +960,10 @@ app.delete('/api/medicationschedule/duplicates', (req, res) => {
 
     duplicates.forEach(dup => {
       const scheduleIds = dup.scheduleIds.split(',');
-      // ✅ เก็บ ID แรก ลบที่เหลือ
+      // เก็บ ID แรก ลบที่เหลือ
       const idsToDelete = scheduleIds.slice(1);
 
-      console.log(`🗑️ Found ${dup.count} duplicates for MedicationID ${dup.MedicationID} at ${dup.Time}`);
+      console.log(`Found ${dup.count} duplicates for MedicationID ${dup.MedicationID} at ${dup.Time}`);
       console.log(`   Keeping ScheduleID: ${scheduleIds[0]}, Deleting: ${idsToDelete.join(', ')}`);
 
       const deleteSql = `
@@ -973,15 +973,15 @@ app.delete('/api/medicationschedule/duplicates', (req, res) => {
 
       db.query(deleteSql, idsToDelete, (delErr, delResult) => {
         if (delErr) {
-          console.error(`❌ Error deleting duplicates:`, delErr);
+          console.error(`Error deleting duplicates:`, delErr);
         } else {
-          console.log(`✅ Deleted ${delResult.affectedRows} duplicate records`);
+          console.log(`Deleted ${delResult.affectedRows} duplicate records`);
           totalDeleted += delResult.affectedRows;
         }
 
         processedGroups++;
 
-        // ✅ เมื่อลบเสร็จทั้งหมด ให้ส่ง response
+        // เมื่อลบเสร็จทั้งหมด ให้ส่ง response
         if (processedGroups === duplicates.length) {
           console.log(`🎉 Total deleted: ${totalDeleted} duplicate records`);
           res.json({
@@ -1079,7 +1079,7 @@ app.get('/api/reminders/today', (req, res) => {
     }
   };
 
-  // ✅ สร้าง schedules ก่อนถ้าไม่มี (ตัวเดียวเท่านั้น!)
+  // สร้าง schedules ก่อนถ้าไม่มี (ตัวเดียวเท่านั้น!)
   const ensureSchedules = () => {
     return new Promise((resolve, reject) => {
       const medSql = `
@@ -1108,21 +1108,21 @@ app.get('/api/reminders/today', (req, res) => {
 
       db.query(medSql, [userId, dateParam, dateParam], (err, medications) => {
         if (err) {
-          console.error('❌ Error fetching medications:', err);
+          console.error('Error fetching medications:', err);
           return reject(err);
         }
 
         console.log(`📊 Found ${medications.length} medications to check`);
 
         if (medications.length === 0) {
-          console.log('✅ No medications to process');
+          console.log('No medications to process');
           return resolve();
         }
 
         let completedCount = 0;
 
         medications.forEach(med => {
-          // ✅ ตรวจสอบแบบเข้มงวด: ต้องไม่มี schedule เดือดเดี่ยว
+          // ตรวจสอบแบบเข้มงวด: ต้องไม่มี schedule เดือดเดี่ยว
           const checkSql = `
           SELECT ScheduleID FROM medicationschedule 
           WHERE MedicationID = ? AND Date = ?
@@ -1131,15 +1131,15 @@ app.get('/api/reminders/today', (req, res) => {
 
           db.query(checkSql, [med.MedicationID, dateParam], (checkErr, checkResult) => {
             if (checkErr) {
-              console.error('❌ Error checking schedule:', checkErr);
+              console.error('Error checking schedule:', checkErr);
               completedCount++;
               if (completedCount === medications.length) resolve();
               return;
             }
 
-            // ✅ ถ้ามี schedule แล้ว ให้ข้ามไป
+            // ถ้ามี schedule แล้ว ให้ข้ามไป
             if (checkResult && checkResult.length > 0) {
-              console.log(`✅ Schedule already exists for MedicationID ${med.MedicationID} (ScheduleID: ${checkResult[0].ScheduleID})`);
+              console.log(`Schedule already exists for MedicationID ${med.MedicationID} (ScheduleID: ${checkResult[0].ScheduleID})`);
               completedCount++;
               if (completedCount === medications.length) resolve();
               return;
@@ -1164,31 +1164,31 @@ app.get('/api/reminders/today', (req, res) => {
             );
 
             if (!shouldCreate) {
-              console.log(`⏭️ Skipping ${med.Name} - not scheduled for ${dateParam}`);
+              console.log(`Skipping ${med.Name} - not scheduled for ${dateParam}`);
               completedCount++;
               if (completedCount === medications.length) resolve();
               return;
             }
 
-            console.log(`✅ Creating NEW schedule for ${med.Name} (${med.FrequencyValue}) on ${dateParam}`);
+            console.log(`Creating NEW schedule for ${med.Name} (${med.FrequencyValue}) on ${dateParam}`);
 
-            // ✅ สร้าง schedule ตามประเภทความถี่
+            // สร้าง schedule ตามประเภทความถี่
             if (med.FrequencyValue === 'every_X_hours' && med.StartTime) {
               const hours = parseInt(med.CustomValue, 10);
               const times = generateHourlyTimesForDate(med.StartTime, hours, dateParam, med.StartDate);
               let insertedCount = 0;
 
               if (times.length === 0) {
-                console.warn(`⚠️ No times generated for ${med.Name}`);
+                console.warn(`No times generated for ${med.Name}`);
                 completedCount++;
                 if (completedCount === medications.length) resolve();
                 return;
               }
 
-              console.log(`🕐 Generating ${times.length} time slots for ${med.Name}`);
+              console.log(`Generating ${times.length} time slots for ${med.Name}`);
 
               times.forEach((timeStr, idx) => {
-                // ✅ ตรวจสอบซ้ำก่อน INSERT เพื่อให้ชัวร์
+                // ตรวจสอบซ้ำก่อน INSERT เพื่อให้ชัวร์
                 const doubleCheckSql = `
                 SELECT ScheduleID FROM medicationschedule 
                 WHERE MedicationID = ? AND Date = ? AND Time = ?
@@ -1197,7 +1197,7 @@ app.get('/api/reminders/today', (req, res) => {
 
                 db.query(doubleCheckSql, [med.MedicationID, dateParam, timeStr], (doubleCheckErr, doubleCheckResult) => {
                   if (doubleCheckErr) {
-                    console.error(`❌ Error double-checking schedule:`, doubleCheckErr);
+                    console.error(`Error double-checking schedule:`, doubleCheckErr);
                     insertedCount++;
                     if (insertedCount === times.length) {
                       completedCount++;
@@ -1206,9 +1206,9 @@ app.get('/api/reminders/today', (req, res) => {
                     return;
                   }
 
-                  // ✅ ถ้ามี schedule ที่เวลานั้นแล้ว ให้ข้าม
+                  // ถ้ามี schedule ที่เวลานั้นแล้ว ให้ข้าม
                   if (doubleCheckResult && doubleCheckResult.length > 0) {
-                    console.log(`⚠️ Schedule already exists: ${med.Name} at ${timeStr} (ScheduleID: ${doubleCheckResult[0].ScheduleID})`);
+                    console.log(`Schedule already exists: ${med.Name} at ${timeStr} (ScheduleID: ${doubleCheckResult[0].ScheduleID})`);
                     insertedCount++;
                     if (insertedCount === times.length) {
                       completedCount++;
@@ -1217,7 +1217,7 @@ app.get('/api/reminders/today', (req, res) => {
                     return;
                   }
 
-                  // ✅ INSERT เมื่อมั่นใจว่าไม่มีอยู่
+                  // INSERT เมื่อมั่นใจว่าไม่มีอยู่
                   const insertSql = `
                   INSERT INTO medicationschedule 
                   (MedicationID, DefaultTime_ID, Date, Time, Status)
@@ -1226,9 +1226,9 @@ app.get('/api/reminders/today', (req, res) => {
 
                   db.query(insertSql, [med.MedicationID, dateParam, timeStr], (insertErr, insertResult) => {
                     if (insertErr) {
-                      console.error(`❌ Error inserting schedule for ${timeStr}:`, insertErr);
+                      console.error(`Error inserting schedule for ${timeStr}:`, insertErr);
                     } else {
-                      console.log(`✅ Inserted: ${med.Name} at ${timeStr} (ID: ${insertResult.insertId})`);
+                      console.log(`Inserted: ${med.Name} at ${timeStr} (ID: ${insertResult.insertId})`);
                     }
                     insertedCount++;
 
@@ -1240,7 +1240,7 @@ app.get('/api/reminders/today', (req, res) => {
                 });
               });
             } else if (med.defaulttime_id && med.Time) {
-              // ✅ ตรวจสอบซ้ำสำหรับความถี่อื่น
+              // ตรวจสอบซ้ำสำหรับความถี่อื่น
               const doubleCheckSql = `
               SELECT ScheduleID FROM medicationschedule 
               WHERE MedicationID = ? AND Date = ? AND DefaultTime_ID = ?
@@ -1249,21 +1249,21 @@ app.get('/api/reminders/today', (req, res) => {
 
               db.query(doubleCheckSql, [med.MedicationID, dateParam, med.defaulttime_id], (doubleCheckErr, doubleCheckResult) => {
                 if (doubleCheckErr) {
-                  console.error(`❌ Error double-checking schedule:`, doubleCheckErr);
+                  console.error(`Error double-checking schedule:`, doubleCheckErr);
                   completedCount++;
                   if (completedCount === medications.length) resolve();
                   return;
                 }
 
-                // ✅ ถ้ามีแล้ว ให้ข้าม
+                // ถ้ามีแล้ว ให้ข้าม
                 if (doubleCheckResult && doubleCheckResult.length > 0) {
-                  console.log(`⚠️ Schedule already exists for DefaultTime_ID ${med.defaulttime_id}`);
+                  console.log(`Schedule already exists for DefaultTime_ID ${med.defaulttime_id}`);
                   completedCount++;
                   if (completedCount === medications.length) resolve();
                   return;
                 }
 
-                // ✅ INSERT
+                // INSERT
                 const insertSql = `
                 INSERT INTO medicationschedule 
                 (MedicationID, DefaultTime_ID, Date, Time, Status)
@@ -1272,9 +1272,9 @@ app.get('/api/reminders/today', (req, res) => {
 
                 db.query(insertSql, [med.MedicationID, med.defaulttime_id, dateParam, med.Time], (insertErr, insertResult) => {
                   if (insertErr) {
-                    console.error(`❌ Error inserting schedule:`, insertErr);
+                    console.error(`Error inserting schedule:`, insertErr);
                   } else {
-                    console.log(`✅ Inserted: ${med.Name} at ${med.Time} (ID: ${insertResult.insertId})`);
+                    console.log(`Inserted: ${med.Name} at ${med.Time} (ID: ${insertResult.insertId})`);
                   }
                   completedCount++;
                   if (completedCount === medications.length) resolve();
@@ -1399,7 +1399,7 @@ app.get('/api/reminders/today', (req, res) => {
       if (err1) {
         console.error('❌ Error fetching every_X_hours:', err1);
       } else {
-        console.log(`✅ Fetched ${rows1.length} every_X_hours schedules`);
+        console.log(`Fetched ${rows1.length} every_X_hours schedules`);
         allRows = allRows.concat(rows1 || []);
       }
       completedQueries++;
@@ -1412,9 +1412,9 @@ app.get('/api/reminders/today', (req, res) => {
     // Query 2: other frequency
     db.query(sqlOtherFrequency, params, (err2, rows2) => {
       if (err2) {
-        console.error('❌ Error fetching other frequency:', err2);
+        console.error('Error fetching other frequency:', err2);
       } else {
-        console.log(`✅ Fetched ${rows2.length} other frequency schedules`);
+        console.log(`Fetched ${rows2.length} other frequency schedules`);
         allRows = allRows.concat(rows2 || []);
       }
       completedQueries++;
@@ -1424,23 +1424,23 @@ app.get('/api/reminders/today', (req, res) => {
       }
     });
 
-    // ✅ ฟังก์ชันรวม + ลบซ้ำ + sort
+    // ฟังก์ชันรวม + ลบซ้ำ + sort
     const finishFetch = () => {
       if (hasResponded) return;
 
-      console.log(`📊 Found ${allRows.length} total schedules (before dedup)`);
+      console.log(`Found ${allRows.length} total schedules (before dedup)`);
 
       const seenSchedules = new Set();
       const filtered = (allRows || [])
         .filter(r => {
           if (!r.ScheduleID) {
-            console.warn('⚠️ Row without ScheduleID:', r.MedicationID);
+            console.warn('Row without ScheduleID:', r.MedicationID);
             return false;
           }
 
           const key = `${r.ScheduleID}`;
           if (seenSchedules.has(key)) {
-            console.warn(`⚠️ Duplicate found: ScheduleID ${r.ScheduleID}, skipping...`);
+            console.warn(`Duplicate found: ScheduleID ${r.ScheduleID}, skipping...`);
             return false;
           }
           seenSchedules.add(key);
@@ -1465,18 +1465,18 @@ app.get('/api/reminders/today', (req, res) => {
         }))
         .sort((a, b) => a.Time.localeCompare(b.Time));
 
-      console.log(`✅ Returning ${filtered.length} unique reminders`);
+      console.log(`Returning ${filtered.length} unique reminders`);
 
       hasResponded = true;
       res.json(filtered);
     };
   }).catch(err => {
-    console.error('❌ Error in ensureSchedules:', err);
+    console.error('Error in ensureSchedules:', err);
     res.status(500).json({ error: 'Failed to create schedules' });
   });
 });
 
-// ✅ ฟังก์ชัน async สำหรับสร้าง schedules โดยไม่ส่ง response ซ้ำ
+// ฟังก์ชัน async สำหรับสร้าง schedules โดยไม่ส่ง response ซ้ำ
 // const createSchedulesAsync = (rows, dateParam, userId) => {
 //   const needSchedules = new Map();
 
@@ -1492,7 +1492,7 @@ app.get('/api/reminders/today', (req, res) => {
 //       const key = `${r.MedicationID}_hourly`;
 
 //       if (!r.ScheduleID && !needSchedules.has(key)) {
-//         console.log(`🔍 Found every_X_hours medication without schedule: ${r.name} (ID: ${r.MedicationID})`);
+//         console.log(`Found every_X_hours medication without schedule: ${r.name} (ID: ${r.MedicationID})`);
 
 //         let weekDays = null;
 //         let monthDays = null;
@@ -1549,7 +1549,7 @@ app.get('/api/reminders/today', (req, res) => {
 
 //   const toInsert = Array.from(needSchedules.values());
 
-//   console.log(`📝 Need to create schedules for ${toInsert.length} medication entries`);
+//   console.log(`Need to create schedules for ${toInsert.length} medication entries`);
 
 //   const shouldHaveMedicationOnDate = (dateStr, frequencyValue, startDateStr, endDateStr, customValue, weekDaysArr, monthDaysArr, cycleUse, cycleRest, onDemand) => {
 //     if (onDemand) return false;
@@ -1630,17 +1630,17 @@ app.get('/api/reminders/today', (req, res) => {
 //     );
 
 //     if (!shouldCreate) {
-//       console.log(`⏭️ Skipping ${entry.Name} - not scheduled for ${dateParam}`);
+//       console.log(`⏭Skipping ${entry.Name} - not scheduled for ${dateParam}`);
 //       return;
 //     }
 
-//     console.log(`✅ Creating schedule for ${entry.Name} on ${dateParam}`);
+//     console.log(`Creating schedule for ${entry.Name} on ${dateParam}`);
 
 //     if (entry.FrequencyValue === 'every_X_hours' && entry.StartTime) {
 //       const hours = parseInt(entry.CustomValue, 10);
 //       const times = generateHourlyTimesForDate(entry.StartTime, hours, dateParam, entry.StartDate);
 
-//       console.log(`📅 Creating ${times.length} schedules for ${entry.Name} on ${dateParam}`);
+//       console.log(`Creating ${times.length} schedules for ${entry.Name} on ${dateParam}`);
 
 //       times.forEach(timeStr => {
 //         const insertSql = `
@@ -1652,9 +1652,9 @@ app.get('/api/reminders/today', (req, res) => {
 //         insertTasks.push(new Promise((resolve) => {
 //           db.query(insertSql, params, (err3, result3) => {
 //             if (err3) {
-//               console.error(`❌ Error inserting hourly schedule for ${dateParam} ${timeStr}:`, err3);
+//               console.error(`Error inserting hourly schedule for ${dateParam} ${timeStr}:`, err3);
 //             } else if (result3.affectedRows > 0) {
-//               console.log(`✅ Inserted schedule: ${entry.Name} at ${dateParam} ${timeStr}`);
+//               console.log(`Inserted schedule: ${entry.Name} at ${dateParam} ${timeStr}`);
 //             }
 //             resolve();
 //           });
@@ -1670,9 +1670,9 @@ app.get('/api/reminders/today', (req, res) => {
 //       insertTasks.push(new Promise((resolve) => {
 //         db.query(insertSql, params, (err3, result3) => {
 //           if (err3) {
-//             console.error('❌ Error inserting schedule:', err3);
+//             console.error('Error inserting schedule:', err3);
 //           } else if (result3.affectedRows > 0) {
-//             console.log(`✅ Inserted schedule: ${entry.Name} at ${dateParam} ${entry.Time}`);
+//             console.log(`Inserted schedule: ${entry.Name} at ${dateParam} ${entry.Time}`);
 //           }
 //           resolve();
 //         });
@@ -1681,15 +1681,15 @@ app.get('/api/reminders/today', (req, res) => {
 //   });
 
 //   Promise.all(insertTasks).then(() => {
-//     console.log(`✅ Completed ${insertTasks.length} schedule insertions`);
+//     console.log(`Completed ${insertTasks.length} schedule insertions`);
 //   }).catch(errPromise => {
-//     console.error('❌ Error processing schedule inserts:', errPromise);
+//     console.error('Error processing schedule inserts:', errPromise);
 //   });
 // };
 
 const generateHourlyTimesForDate = (startTime, hours, targetDate, startDateStr) => {
   if (!startTime || !hours) {
-    console.warn('⚠️ Missing startTime or hours:', { startTime, hours });
+    console.warn('Missing startTime or hours:', { startTime, hours });
     return [];
   }
 
@@ -1753,7 +1753,7 @@ const generateHourlyTimesForDate = (startTime, hours, targetDate, startDateStr) 
   return times;
 };
 
-// ✅ ฟังก์ชันอัปเดต medicationlog จาก medicationschedule
+// ฟังก์ชันอัปเดต medicationlog จาก medicationschedule
 const updateMedicationLog = async (medicationId, date) => {
   try {
     // นับจำนวน schedule ทั้งหมดในวันนั้น
@@ -1838,7 +1838,7 @@ const updateMedicationLog = async (medicationId, date) => {
       ]
     );
 
-    console.log('✅ Updated medicationlog:', {
+    console.log('Updated medicationlog:', {
       medicationId,
       date,
       totalCount,
@@ -1863,17 +1863,17 @@ const updateMedicationLog = async (medicationId, date) => {
       avgLateMinutes
     };
   } catch (error) {
-    console.error('❌ Error updating medication log:', error);
+    console.error('Error updating medication log:', error);
     throw error;
   }
 };
 
-// ✅ PATCH /api/schedule/:id/status - อัปเดตสถานะการกินยา
+// PATCH /api/schedule/:id/status - อัปเดตสถานะการกินยา
 app.patch('/api/schedule/:id/status', async (req, res) => {
   const scheduleId = req.params.id;
   const { status, sideEffects, actualTime, recordedAt, timingNote } = req.body;
 
-  console.log('🔄 Update schedule status:', { scheduleId, status, actualTime });
+  console.log('Update schedule status:', { scheduleId, status, actualTime });
 
   if (!status) {
     return res.status(400).json({ error: 'Status is required' });
@@ -1901,14 +1901,14 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
     let isLate = 0;
     let finalTimingNote = 'ไม่ระบุ';
 
-    // ✅ คำนวณ Late และ TimingNote เฉพาะเมื่อสถานะเป็น "กินแล้ว"
+    // คำนวณ Late และ TimingNote เฉพาะเมื่อสถานะเป็น "กินแล้ว"
     if (status === 'กินแล้ว' && actualTime && scheduledTime) {
       const timingResult = calculateLateMinutes(scheduledTime, actualTime, DEFAULT_TOLERANCE_MINUTES);
       lateMinutes = timingResult.lateMinutes;
       isLate = timingResult.isLate;
       finalTimingNote = timingResult.timingNote;
 
-      console.log('✅ Timing calculation:', {
+      console.log('Timing calculation:', {
         scheduledTime,
         actualTime,
         lateMinutes,
@@ -1917,7 +1917,7 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
       });
     }
 
-    // ✅ อัปเดต schedule พร้อม LateMinutes, IsLate, TimingNote
+    //อัปเดต schedule พร้อม LateMinutes, IsLate, TimingNote
     await db.promise().query(
       `UPDATE medicationschedule 
        SET Status = ?, 
@@ -1932,10 +1932,10 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
         lateMinutes, isLate, finalTimingNote, scheduleId]
     );
 
-    // ✅ อัปเดต medicationlog
+    // อัปเดต medicationlog
     const logResult = await updateMedicationLog(MedicationID, scheduleDate);
 
-    console.log('✅ Schedule and log updated:', {
+    console.log('Schedule and log updated:', {
       scheduleId,
       status,
       lateMinutes,
@@ -1955,15 +1955,15 @@ app.patch('/api/schedule/:id/status', async (req, res) => {
       log: logResult
     });
   } catch (error) {
-    console.error('❌ Update schedule status error:', error);
+    console.error('Update schedule status error:', error);
     res.status(500).json({ error: 'Database error', details: error.message });
   }
 });
 
-// ✅ ฟังก์ชัน Batch Update Log สำหรับทุกยาในวันที่กำหนด
+// ฟังก์ชัน Batch Update Log สำหรับทุกยาในวันที่กำหนด
 const batchUpdateLogs = async (date) => {
   try {
-    console.log(`🔄 Batch updating logs for date: ${date}`);
+    console.log(`Batch updating logs for date: ${date}`);
 
     // ดึงรายการยาทั้งหมดที่มี schedule ในวันนั้น
     const [medications] = await db.promise().query(
@@ -1981,18 +1981,18 @@ const batchUpdateLogs = async (date) => {
         await updateMedicationLog(MedicationID, date);
         successCount++;
       } catch (error) {
-        console.error(`❌ Failed to update log for MedicationID ${MedicationID}:`, error);
+        console.error(`Failed to update log for MedicationID ${MedicationID}:`, error);
         errorCount++;
       }
     }
 
-    console.log(`✅ Batch update completed: ${successCount} success, ${errorCount} errors`);
+    console.log(`Batch update completed: ${successCount} success, ${errorCount} errors`);
   } catch (error) {
-    console.error('❌ Batch update error:', error);
+    console.error('Batch update error:', error);
   }
 };
 
-// ✅ เรียก batch update ทุกเที่ยงคืน (00:00)
+// เรียก batch update ทุกเที่ยงคืน (00:00)
 const scheduleBatchUpdate = () => {
   const now = new Date();
   const tonight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
@@ -2014,19 +2014,19 @@ const scheduleBatchUpdate = () => {
     }, 24 * 60 * 60 * 1000); // ทุก 24 ชม.
   }, msUntilMidnight);
 
-  console.log(`⏰ Scheduled batch update at midnight (in ${Math.round(msUntilMidnight / 1000 / 60)} minutes)`);
+  console.log(`Scheduled batch update at midnight (in ${Math.round(msUntilMidnight / 1000 / 60)} minutes)`);
 };
 
 // เรียกตอน start server
 scheduleBatchUpdate();
 
 
-// ✅ PATCH /api/medications/:id - อัปเดตข้อมูลยา
+// PATCH /api/medications/:id - อัปเดตข้อมูลยา
 app.patch('/api/medications/:id', async (req, res) => {
   const medicationId = req.params.id;
   const data = req.body;
 
-  console.log('🔄 PATCH /api/medications/:id', { medicationId, data });
+  console.log('PATCH /api/medications/:id', { medicationId, data });
 
   let {
     UserID, Name, Note, GroupID, TypeID, Dosage,
@@ -2107,7 +2107,7 @@ app.patch('/api/medications/:id', async (req, res) => {
       }
     }
 
-    // ✅ อัปเดตตาราง medication
+    // อัปเดตตาราง medication
     const updateSql = `
       UPDATE medication SET
         userid = ?,
@@ -2159,10 +2159,10 @@ app.patch('/api/medications/:id', async (req, res) => {
       medicationId
     ]);
 
-    // ✅ ลบ default time เก่า
+    // ลบ default time เก่า
     await db.promise().query('DELETE FROM medication_defaulttime WHERE medicationid = ?', [medicationId]);
 
-    // ✅ เพิ่ม default time ใหม่ (ถ้าไม่ใช่ every_X_hours)
+    // เพิ่ม default time ใหม่ (ถ้าไม่ใช่ every_X_hours)
     if (Frequency !== 'every_X_hours' && defaultTimeIds.length > 0) {
       const values = defaultTimeIds.map(dt => [medicationId, dt]);
       await db.promise().query(
@@ -2171,10 +2171,10 @@ app.patch('/api/medications/:id', async (req, res) => {
       );
     }
 
-    // ✅ ลบ schedule เก่าทั้งหมด (เพื่อสร้างใหม่ตามความถี่ใหม่)
+    // ลบ schedule เก่าทั้งหมด (เพื่อสร้างใหม่ตามความถี่ใหม่)
     await db.promise().query('DELETE FROM medicationschedule WHERE MedicationID = ?', [medicationId]);
 
-    console.log('✅ Medication updated successfully:', medicationId);
+    console.log('Medication updated successfully:', medicationId);
 
     res.json({
       success: true,
@@ -2183,7 +2183,7 @@ app.patch('/api/medications/:id', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Update medication error:', error);
+    console.error('Update medication error:', error);
     res.status(500).json({
       error: 'Failed to update medication',
       details: error.message
@@ -2196,12 +2196,12 @@ app.patch('/api/medications/:id/toggle-active', (req, res) => {
   const medicationId = req.params.id;
   const { isActive } = req.body; // true = active, false = inactive
 
-  console.log('🔄 Toggle active:', { medicationId, isActive });
+  console.log('Toggle active:', { medicationId, isActive });
 
   const sql = 'UPDATE medication SET IsActive = ? WHERE MedicationID = ?';
   db.query(sql, [isActive ? 1 : 0, medicationId], (err, result) => {
     if (err) {
-      console.error('❌ Toggle active error:', err);
+      console.error('Toggle active error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
@@ -2217,7 +2217,7 @@ app.patch('/api/medications/:id/toggle-active', (req, res) => {
   });
 });
 
-// ✅ GET /api/schedule/:id - ดึงข้อมูล schedule เดียว (สำหรับ verify)
+// GET /api/schedule/:id - ดึงข้อมูล schedule เดียว (สำหรับ verify)
 app.get('/api/schedule/:id', (req, res) => {
   const scheduleId = req.params.id;
 
@@ -2237,7 +2237,7 @@ app.get('/api/schedule/:id', (req, res) => {
 
   db.query(sql, [scheduleId], (err, result) => {
     if (err) {
-      console.error('❌ Get schedule error:', err);
+      console.error('Get schedule error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
@@ -2249,7 +2249,7 @@ app.get('/api/schedule/:id', (req, res) => {
   });
 });
 
-// ✅ DELETE /api/schedule/:id - ลบ schedule (ถ้าต้องการ)
+// DELETE /api/schedule/:id - ลบ schedule (ถ้าต้องการ)
 app.delete('/api/schedule/:id', (req, res) => {
   const scheduleId = req.params.id;
 
@@ -2257,7 +2257,7 @@ app.delete('/api/schedule/:id', (req, res) => {
 
   db.query(sql, [scheduleId], (err, result) => {
     if (err) {
-      console.error('❌ Delete schedule error:', err);
+      console.error('Delete schedule error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
@@ -2277,7 +2277,7 @@ app.get('/api/user/:id', (req, res) => {
     [userId],
     (err, result) => {
       if (err) {
-        console.error('❌ Error retrieving profile:', err);
+        console.error('Error retrieving profile:', err);
         return res.status(500).json({ error: 'Database error' });
       }
       if (result.length === 0) {
@@ -2344,7 +2344,7 @@ app.get('/api/meal-times/:id', (req, res) => {
   });
 });
 
-// ✅ GET /api/meal-times/:userId - ดึงเวลาอาหารของ user
+// GET /api/meal-times/:userId - ดึงเวลาอาหารของ user
 app.get('/api/meal-times/:userId', (req, res) => {
   const userId = req.params.userId;
 
@@ -2366,12 +2366,12 @@ app.get('/api/meal-times/:userId', (req, res) => {
 
   db.query(query, [userId], (err, results) => {
     if (err) {
-      console.error('❌ Database query error:', err);
+      console.error('Database query error:', err);
       return res.status(500).json({ error: 'Failed to fetch meal times' });
     }
 
     if (results.length === 0) {
-      console.log('⚠️ No meal times found for user:', userId);
+      console.log('No meal times found for user:', userId);
 
       // สร้างค่าเริ่มต้นถ้าไม่มีข้อมูล
       const defaultTimes = [
@@ -2418,7 +2418,7 @@ app.get('/api/meal-times/:userId', (req, res) => {
           });
         })
         .catch(err => {
-          console.error('❌ Error creating default meal times:', err);
+          console.error('Error creating default meal times:', err);
           res.status(500).json({ error: 'Failed to create default meal times' });
         });
 
@@ -2440,12 +2440,12 @@ app.get('/api/meal-times/:userId', (req, res) => {
       return acc;
     }, {});
 
-    console.log('✅ Meal times fetched:', mealTimes);
+    console.log('Meal times fetched:', mealTimes);
     res.json(mealTimes);
   });
 });
 
-// ✅ PATCH /api/meal-times/:userId - อัปเดตเวลาอาหาร
+// PATCH /api/meal-times/:userId - อัปเดตเวลาอาหาร
 app.patch('/api/meal-times/:userId', async (req, res) => {
   const userId = req.params.userId;
   const { breakfast, lunch, dinner, snack } = req.body;
@@ -2475,10 +2475,10 @@ app.patch('/api/meal-times/:userId', async (req, res) => {
 
         db.query(query, [fullTime, userId, MealID], (err, result) => {
           if (err) {
-            console.error(`❌ Failed to update MealID ${MealID}:`, err);
+            console.error(`Failed to update MealID ${MealID}:`, err);
             reject(err);
           } else {
-            console.log(`✅ Updated MealID ${MealID} to ${fullTime}`);
+            console.log(`Updated MealID ${MealID} to ${fullTime}`);
             resolve(result);
           }
         });
@@ -2492,7 +2492,7 @@ app.patch('/api/meal-times/:userId', async (req, res) => {
       message: 'Meal times updated successfully'
     });
   } catch (error) {
-    console.error('❌ Error updating meal times:', error);
+    console.error('Error updating meal times:', error);
     res.status(500).json({
       error: 'Failed to update meal times',
       details: error.message
@@ -2634,11 +2634,11 @@ app.get('/api/history', (req, res) => {
 
 // เพิ่มใน app.js หลัง API อื่นๆ
 
-// ✅ API สำหรับบันทึก/อัปเดต log เมื่อมีการเปลี่ยนสถานะ
+// API สำหรับบันทึก/อัปเดต log เมื่อมีการเปลี่ยนสถานะ
 app.post('/api/medicationlog', async (req, res) => {
   const { medicationId, scheduleId, date, status, sideEffects } = req.body;
 
-  console.log('📝 Received log request:', { medicationId, scheduleId, date, status });
+  console.log('Received log request:', { medicationId, scheduleId, date, status });
 
   try {
     if (!scheduleId || !medicationId || !date) {
@@ -2653,7 +2653,7 @@ app.post('/api/medicationlog', async (req, res) => {
     );
     const totalCount = countResult[0]?.total || 0;
 
-    // ✅ นับตามสถานะละเอียด
+    // นับตามสถานะละเอียด
     const [statusResult] = await db.promise().query(
       `SELECT 
          SUM(CASE WHEN Status = 'กินแล้ว' AND IsLate = 0 THEN 1 ELSE 0 END) as onTime,
@@ -2676,12 +2676,12 @@ app.post('/api/medicationlog', async (req, res) => {
 
     const perCount = totalCount > 0 ? ((takenCount / totalCount) * 100).toFixed(2) : 0;
 
-    console.log('📊 Stats:', {
+    console.log('Stats:', {
       totalCount, onTimeCount, lateCount, takenCount, skippedCount, unknownCount,
       perCount, avgLateMinutes
     });
 
-    // ✅ บันทึก log พร้อมข้อมูลละเอียด
+    // บันทึก log พร้อมข้อมูลละเอียด
     await db.promise().query(
       `INSERT INTO medicationlog 
        (MedicationID, ScheduleID, \`Count\`, OnTimeCount, LateCount, TakenCount, SkippedCount, UnknownCount, 
@@ -2714,12 +2714,12 @@ app.post('/api/medicationlog', async (req, res) => {
       avgLateMinutes
     });
   } catch (error) {
-    console.error('❌ Error updating medication log:', error);
+    console.error('Error updating medication log:', error);
     res.status(500).json({ error: 'Failed to update log', details: error.message });
   }
 });
 
-// ✅ API สำหรับดึง % ของยาแต่ละตัว
+// API สำหรับดึง % ของยาแต่ละตัว
 app.get('/api/medicationlog/stats', async (req, res) => {
   const { userId, from, to } = req.query;
 
@@ -2784,11 +2784,11 @@ app.get('/api/medicationlog/stats', async (req, res) => {
       AvgLateMinutes: parseFloat(row.AvgLateMinutes) || 0
     }));
 
-    console.log(`✅ Fetched stats for ${processedRows.length} medications`);
+    console.log(`Fetched stats for ${processedRows.length} medications`);
 
     res.json(processedRows);
   } catch (error) {
-    console.error('❌ Error fetching medication stats:', error);
+    console.error('Error fetching medication stats:', error);
     res.status(500).json({
       error: 'Failed to fetch stats',
       details: error.message
@@ -2803,7 +2803,7 @@ app.get('/api/history/summary', async (req, res) => {
 
   const lateThresholdMinutes = Math.round(parseFloat(lateThresholdHours) * 60);
 
-  console.log('📊 Fetching summary with threshold:', {
+  console.log('Fetching summary with threshold:', {
     lateThresholdHours,
     lateThresholdMinutes
   });
@@ -2857,11 +2857,11 @@ app.get('/api/history/summary', async (req, res) => {
     summary.avgLateMinutes = parseFloat(summary.avgLateMinutes || 0).toFixed(2);
     summary.avgLateHours = (summary.avgLateMinutes / 60).toFixed(2);
 
-    console.log('✅ Summary result:', summary);
+    console.log('Summary result:', summary);
 
     res.json(summary);
   } catch (error) {
-    console.error('❌ Error fetching summary:', error);
+    console.error('Error fetching summary:', error);
     res.status(500).json({
       error: 'Failed to fetch summary',
       details: error.message
@@ -2869,10 +2869,7 @@ app.get('/api/history/summary', async (req, res) => {
   }
 });
 
-// ============================================
-// 🔧 API แก้ไข/ลบ กลุ่มโรค (Groups)
-// ============================================
-
+// API แก้ไข/ลบ กลุ่มโรค (Groups)
 // PUT /api/groups/:id - แก้ไขกลุ่มโรค
 app.put('/api/groups/:id', (req, res) => {
   const groupId = req.params.id;
@@ -2885,7 +2882,7 @@ app.put('/api/groups/:id', (req, res) => {
   const sql = 'UPDATE diseasegroup SET GroupName = ?, UserID = ? WHERE GroupID = ?';
   db.query(sql, [GroupName, UserID || null, groupId], (err, result) => {
     if (err) {
-      console.error('❌ Update group error:', err);
+      console.error('Update group error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
@@ -2905,7 +2902,7 @@ app.delete('/api/groups/:id', (req, res) => {
   const checkSql = 'SELECT COUNT(*) as count FROM medication WHERE GroupID = ?';
   db.query(checkSql, [groupId], (err, result) => {
     if (err) {
-      console.error('❌ Check group usage error:', err);
+      console.error('Check group usage error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
@@ -2921,7 +2918,7 @@ app.delete('/api/groups/:id', (req, res) => {
     const deleteSql = 'DELETE FROM diseasegroup WHERE GroupID = ?';
     db.query(deleteSql, [groupId], (err2, result2) => {
       if (err2) {
-        console.error('❌ Delete group error:', err2);
+        console.error('Delete group error:', err2);
         return res.status(500).json({ error: 'Database error', details: err2.message });
       }
 
@@ -2934,10 +2931,8 @@ app.delete('/api/groups/:id', (req, res) => {
   });
 });
 
-// ============================================
-// 🔧 API แก้ไข/ลบ ประเภทยา (Types)
-// ============================================
 
+//  API แก้ไข/ลบ ประเภทยา (Types)
 // PUT /api/types/:id - แก้ไขประเภทยา
 app.put('/api/types/:id', (req, res) => {
   const typeId = req.params.id;
@@ -2950,7 +2945,7 @@ app.put('/api/types/:id', (req, res) => {
   const sql = 'UPDATE medicationtype SET TypeName = ?, UserID = ? WHERE TypeID = ?';
   db.query(sql, [TypeName, UserID || null, typeId], (err, result) => {
     if (err) {
-      console.error('❌ Update type error:', err);
+      console.error('Update type error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
@@ -2970,7 +2965,7 @@ app.delete('/api/types/:id', (req, res) => {
   const checkSql = 'SELECT COUNT(*) as count FROM medication WHERE TypeID = ?';
   db.query(checkSql, [typeId], (err, result) => {
     if (err) {
-      console.error('❌ Check type usage error:', err);
+      console.error('Check type usage error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
@@ -2986,7 +2981,7 @@ app.delete('/api/types/:id', (req, res) => {
     const deleteSql = 'DELETE FROM medicationtype WHERE TypeID = ?';
     db.query(deleteSql, [typeId], (err2, result2) => {
       if (err2) {
-        console.error('❌ Delete type error:', err2);
+        console.error('Delete type error:', err2);
         return res.status(500).json({ error: 'Database error', details: err2.message });
       }
 
@@ -2999,10 +2994,8 @@ app.delete('/api/types/:id', (req, res) => {
   });
 });
 
-// ============================================
-// 🔧 API แก้ไข/ลบ หน่วยยา (Units)
-// ============================================
 
+//  API แก้ไข/ลบ หน่วยยา (Units)
 // PUT /api/units/:id - แก้ไขหน่วยยา
 app.put('/api/units/:id', (req, res) => {
   const unitId = req.params.id;
@@ -3015,7 +3008,7 @@ app.put('/api/units/:id', (req, res) => {
   const sql = 'UPDATE dosageunit SET DosageType = ?, UserID = ? WHERE UnitID = ?';
   db.query(sql, [DosageType, UserID || null, unitId], (err, result) => {
     if (err) {
-      console.error('❌ Update unit error:', err);
+      console.error('Update unit error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
@@ -3035,7 +3028,7 @@ app.delete('/api/units/:id', (req, res) => {
   const checkSql = 'SELECT COUNT(*) as count FROM medication WHERE UnitID = ?';
   db.query(checkSql, [unitId], (err, result) => {
     if (err) {
-      console.error('❌ Check unit usage error:', err);
+      console.error('Check unit usage error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
     }
 
@@ -3051,7 +3044,7 @@ app.delete('/api/units/:id', (req, res) => {
     const deleteSql = 'DELETE FROM dosageunit WHERE UnitID = ?';
     db.query(deleteSql, [unitId], (err2, result2) => {
       if (err2) {
-        console.error('❌ Delete unit error:', err2);
+        console.error('Delete unit error:', err2);
         return res.status(500).json({ error: 'Database error', details: err2.message });
       }
 
@@ -3064,10 +3057,10 @@ app.delete('/api/units/:id', (req, res) => {
   });
 });
 
-// ✅ ค่า tolerance สำหรับความช้า (นาที)  ที่ Frontend ใน HomeScreen
+// ค่า tolerance สำหรับความช้า (นาที)  ที่ Frontend ใน HomeScreen
 const DEFAULT_TOLERANCE_MINUTES = 5;
 
-// ✅ ฟังก์ชันคำนวณเวลาที่กินช้า
+// ฟังก์ชันคำนวณเวลาที่กินช้า
 const calculateLateMinutes = (scheduledTime, actualTime, toleranceMinutes = DEFAULT_TOLERANCE_MINUTES) => {
   if (!scheduledTime || !actualTime) return { lateMinutes: null, isLate: 0, timingNote: 'ไม่ระบุ' };
 
@@ -3080,7 +3073,7 @@ const calculateLateMinutes = (scheduledTime, actualTime, toleranceMinutes = DEFA
     const diffMs = actual - scheduled;
     const diffMinutes = Math.floor(diffMs / 60000);
 
-    // ✅ ถ้าภายใน ±tolerance นาที ถือว่าตรงเวลา
+    // ถ้าภายใน ±tolerance นาที ถือว่าตรงเวลา
     if (Math.abs(diffMinutes) <= toleranceMinutes) {
       return {
         lateMinutes: 0,
@@ -3089,7 +3082,7 @@ const calculateLateMinutes = (scheduledTime, actualTime, toleranceMinutes = DEFA
       };
     }
 
-    // ✅ ถ้าเกินกว่า tolerance นาที ถือว่ากินช้า
+    // ถ้าเกินกว่า tolerance นาที ถือว่ากินช้า
     if (diffMinutes > toleranceMinutes) {
       return {
         lateMinutes: diffMinutes,
@@ -3098,14 +3091,14 @@ const calculateLateMinutes = (scheduledTime, actualTime, toleranceMinutes = DEFA
       };
     }
 
-    // ✅ ถ้าก่อนเวลามากกว่า tolerance ถือว่ากินก่อนเวลา (ไม่บ่อย แต่ต้องรองรับ)
+    // ถ้าก่อนเวลามากกว่า tolerance ถือว่ากินก่อนเวลา (ไม่บ่อย แต่ต้องรองรับ)
     return {
       lateMinutes: 0,
       isLate: 0,
       timingNote: 'ตรงเวลา'
     };
   } catch (err) {
-    console.error('❌ Error in calculateLateMinutes:', err);
+    console.error('Error in calculateLateMinutes:', err);
     return { lateMinutes: null, isLate: 0, timingNote: 'ไม่ระบุ' };
   }
 };
@@ -3124,9 +3117,9 @@ const autoUpdateExpiredSchedules = () => {
 
   db.query(sql, [currentDate], (err, result) => {
     if (err) {
-      console.error('❌ Auto-update expired schedules error:', err);
+      console.error('Auto-update expired schedules error:', err);
     } else if (result.affectedRows > 0) {
-      console.log(`✅ Auto-updated ${result.affectedRows} expired schedules to "ไม่ระบุ"`);
+      console.log(` Auto-updated ${result.affectedRows} expired schedules to "ไม่ระบุ"`);
     }
   });
 };
@@ -3136,7 +3129,7 @@ setInterval(autoUpdateExpiredSchedules, 1 * 60 * 1000);
 autoUpdateExpiredSchedules(); // เรียกทันทีตอน start server
 
 
-// ✅ เพิ่ม API สำหรับดึงสถิติเชิงลึก
+// เพิ่ม API สำหรับดึงสถิติเชิงลึก
 app.get('/api/medicationlog/advanced-stats', async (req, res) => {
   const { userId, from, to } = req.query;
 
@@ -3244,7 +3237,7 @@ app.get('/api/medicationlog/advanced-stats', async (req, res) => {
       }))
     });
   } catch (error) {
-    console.error('❌ Error fetching advanced stats:', error);
+    console.error('Error fetching advanced stats:', error);
     res.status(500).json({
       error: 'Failed to fetch stats',
       details: error.message
@@ -3353,7 +3346,7 @@ app.get('/api/medicationlog/medication-time-stats', async (req, res) => {
 
     res.json(Object.values(groupedByMedication));
   } catch (error) {
-    console.error('❌ Error fetching medication time stats:', error);
+    console.error('Error fetching medication time stats:', error);
     res.status(500).json({
       error: 'Failed to fetch stats',
       details: error.message
@@ -3363,5 +3356,5 @@ app.get('/api/medicationlog/medication-time-stats', async (req, res) => {
 
 //  รัน server
 app.listen(3000, () => {
-  console.log('🌐 Server is running on port 3000');
+  console.log('Server is running on port 3000');
 });

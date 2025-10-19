@@ -332,7 +332,7 @@ const MedicationDetailScreen = ({ route, navigation }) => {
       <View style={styles.actionButtons}>
         <TouchableOpacity
           style={styles.editButton}
-          onPress={() => navigation.navigate('EditMedicationScreen', { id: medication.MedicationID })}
+          onPress={() => navigation.navigate('EditMedicationScreen', { medId: route.params.id } )}
         >
           <Ionicons name="create-outline" size={22} color="#fff" />
           <Text style={styles.buttonText}>แก้ไข</Text>
